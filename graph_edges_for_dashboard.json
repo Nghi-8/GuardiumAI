@@ -1,0 +1,155 @@
+{
+  "graph_id": "insurance-claims-graph",
+  "topology_version": "approved-topology-v1-de1-canonical",
+  "topology_approval_status": "PROPOSED_NOT_CONFIRMED",
+  "edge_identity_fields": [
+    "source",
+    "relationship",
+    "target"
+  ],
+  "edges": [
+    {
+      "source": "agent-claims-7f3a9c",
+      "relationship": "CALLS_MODEL",
+      "target": "model:anthropic:claude-sonnet-5",
+      "signal_type": "NEW_EDGE",
+      "signal_count": 51,
+      "observed": true,
+      "in_proposed_topology": false,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-claims-7f3a9c",
+      "relationship": "CALLS_TOOL",
+      "target": "tool:claims-tools-mcp:fetch_claim",
+      "signal_type": "MATCHED",
+      "signal_count": 34,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-claims-7f3a9c",
+      "relationship": "CALLS_TOOL",
+      "target": "tool:claims-tools-mcp:verify_policy_coverage",
+      "signal_type": "MATCHED",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-claims-7f3a9c",
+      "relationship": "CALLS_TOOL",
+      "target": "tool:claims-tools-mcp:verify_policy_coverage",
+      "signal_type": "MISSING_EDGE",
+      "signal_count": 1,
+      "observed": false,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-claims-7f3a9c",
+      "relationship": "CALLS_TOOL",
+      "target": "tool:payments-mcp:approve_payout",
+      "signal_type": "MATCHED",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-cs-9a01e3-v1",
+      "relationship": "CALLS_MODEL",
+      "target": "model:anthropic:claude-sonnet-5",
+      "signal_type": "NEW_EDGE",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": false,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-cs-9a01e3-v1",
+      "relationship": "CALLS_TOOL",
+      "target": "tool:policy-tools-mcp:lookup_policy_status",
+      "signal_type": "MATCHED",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-cs-9a01e3-v2",
+      "relationship": "CALLS_MODEL",
+      "target": "model:anthropic:claude-sonnet-5",
+      "signal_type": "NEW_EDGE",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": false,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-cs-9a01e3-v2",
+      "relationship": "CALLS_TOOL",
+      "target": "tool:policy-tools-mcp:lookup_policy_status",
+      "signal_type": "MATCHED",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-orch-2b6e11",
+      "relationship": "CALLS_AGENT",
+      "target": "agent-claims-7f3a9c",
+      "signal_type": "MATCHED",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-orch-2b6e11",
+      "relationship": "CALLS_AGENT",
+      "target": "agent-underwriting-4d1c88",
+      "signal_type": "MATCHED",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-underwriting-4d1c88",
+      "relationship": "CALLS_MODEL",
+      "target": "model:openai:gpt-4o",
+      "signal_type": "NEW_EDGE",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": false,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    },
+    {
+      "source": "agent-underwriting-4d1c88",
+      "relationship": "CALLS_TOOL",
+      "target": "tool:credit-bureau-mcp:pull_credit_report",
+      "signal_type": "MATCHED",
+      "signal_count": 17,
+      "observed": true,
+      "in_proposed_topology": true,
+      "graph_id": "insurance-claims-graph",
+      "topology_version": "approved-topology-v1-de1-canonical"
+    }
+  ]
+}

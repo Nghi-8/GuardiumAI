@@ -1,0 +1,55 @@
+{
+  "metric_name": "Direct Blast Radius — New Relationships",
+  "status": "MEASURED_FROM_DE2_BATCH",
+  "display": "4 agents / 2 targets",
+  "topology_version": "approved-topology-v1-de1-canonical",
+  "graph_id": "insurance-claims-graph",
+  "affected_agent_count": 4,
+  "distinct_target_count": 2,
+  "unique_new_relationship_count": 4,
+  "new_edge_signal_count": 102,
+  "affected_agents": [
+    "agent-claims-7f3a9c",
+    "agent-cs-9a01e3-v1",
+    "agent-cs-9a01e3-v2",
+    "agent-underwriting-4d1c88"
+  ],
+  "new_targets": [
+    "model:anthropic:claude-sonnet-5",
+    "model:openai:gpt-4o"
+  ],
+  "target_agent_counts": {
+    "model:anthropic:claude-sonnet-5": 3,
+    "model:openai:gpt-4o": 1
+  },
+  "new_relationships": [
+    {
+      "source": "agent-claims-7f3a9c",
+      "relationship": "CALLS_MODEL",
+      "target": "model:anthropic:claude-sonnet-5",
+      "signal_count": 51
+    },
+    {
+      "source": "agent-cs-9a01e3-v1",
+      "relationship": "CALLS_MODEL",
+      "target": "model:anthropic:claude-sonnet-5",
+      "signal_count": 17
+    },
+    {
+      "source": "agent-cs-9a01e3-v2",
+      "relationship": "CALLS_MODEL",
+      "target": "model:anthropic:claude-sonnet-5",
+      "signal_count": 17
+    },
+    {
+      "source": "agent-underwriting-4d1c88",
+      "relationship": "CALLS_MODEL",
+      "target": "model:openai:gpt-4o",
+      "signal_count": 17
+    }
+  ],
+  "measurement_basis": "Distinct source-relationship-target triples from NEW_EDGE signals",
+  "downstream_impact_status": "NOT_ASSESSED",
+  "security_interpretation": "New edges are not automatically unauthorized, malicious, or confirmed compromise",
+  "topology_approval_status": "PROPOSED_NOT_CONFIRMED"
+}
