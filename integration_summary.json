@@ -1,0 +1,25 @@
+{
+  "handoff": "Nghi dashboard graph and direct blast radius",
+  "source": "Bala initial DE2 ML Tier1 handoff",
+  "graph_id": "insurance-claims-graph",
+  "topology_version": "approved-topology-v1-de1-canonical",
+  "topology_approval_status": "PROPOSED_NOT_CONFIRMED",
+  "total_interaction_events_reported_by_de2": 255,
+  "total_emitted_signals": 256,
+  "signal_counts": {
+    "NEW_EDGE": 102,
+    "MATCHED": 153,
+    "MISSING_EDGE": 1
+  },
+  "unique_new_relationships": 4,
+  "direct_blast_radius": {
+    "agents": 4,
+    "targets": 2
+  },
+  "topology_consistency_mismatches": 0,
+  "observed_count_available": false,
+  "velocity_metrics_available": false,
+  "runtime_context_available_in_signals": false,
+  "downstream_impact_assessed": false,
+  "note": "Signals are not independent proof of malicious activity; MISSING_EDGE is an absence signal, not an observed interaction."
+}
