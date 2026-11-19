@@ -1,501 +1,455 @@
-"""GuardiumOne client demo — Scenario 1/2 visual layout, driven by DE2 handoff files.
+"""GuardiumOne | approved executive layout + validated November 18 ML scenarios.
 
-Run: streamlit run guardiumone_original_layout_demo.py
-
+Run: streamlit run guardiumone_dashboard.py
+Data: nghi_dashboard_handoff_1118.json (same directory).
+No direct DE2 reads, inference, or fabricated KRI measurements.
 """
-
+import html as html_lib
 import json
-from math import isfinite
-
 from pathlib import Path
 
-import html as html_lib
-
 import streamlit as st
-
 import streamlit.components.v1 as components
 
-
-
 ROOT = Path(__file__).parent
-
-
-
-def load(name):
-
-    with (ROOT / name).open(encoding='utf-8') as f:
-
-        return json.load(f)
-
-
-
 st.set_page_config(page_title='GuardiumOne | Executive Risk Console', layout='wide', page_icon='🛡️')
-
 st.markdown('''<style>
-
 .stApp{background:#07090e;color:#f1f1ef}
-
 [data-testid="stSidebar"]{background:#10141c}
-
 div[data-testid="stMetric"]{background:#10141c;border:1px solid #303139;padding:14px;border-radius:9px;min-height:120px;overflow:hidden}
-
 div[data-testid="stMetricValue"]{color:#edcd8c;font-family:monospace;font-size:clamp(.9rem,1.4vw,1.3rem);line-height:1.3}
-
 div[data-testid="stMetricValue"] *{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
-
 h1,h2,h3{letter-spacing:-.025em}
+/* Larger essential copy; keep detailed help in tooltips/expanders. */
+[data-testid="stMarkdownContainer"] p {font-size:1.02rem;line-height:1.65}
+[data-testid="stCaptionContainer"] p {font-size:.91rem;line-height:1.48}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {font-size:.83rem}
+.summary-lead{font-size:1.17rem;line-height:1.55;color:#f1f1ef;margin:0 0 .65rem 0}
+.status-line{padding:.65rem .9rem;background:#171d24;border-left:4px solid #ff951f;border-radius:6px;font-size:1.02rem}
+.focus-note{font-size:1.03rem;line-height:1.6;color:#ebeff0}
+/* More separation through whitespace; fewer gray horizontal bars. */
+.block-gap{height:1.3rem}
 
 .pill{display:inline-block;padding:5px 10px;border-radius:5px;background:#322013;color:#ff951f;font-weight:700}
-
 .stButton>button{border:1px solid #ff951f;background:#151a23;color:#ff951f}
-
 </style>''', unsafe_allow_html=True)
 
-
-
 try:
-
-    blast = load('direct_blast_radius.json')
-
-    graph = load('graph_edges_for_dashboard.json')
-
-    topology = load('approved_topology.json')
-
-    summary = load('integration_summary.json')
-
+    with (ROOT / 'nghi_dashboard_handoff_1118.json').open(encoding='utf-8-sig') as handle:
+        data = json.load(handle)
 except (OSError, ValueError) as exc:
-
-    st.error('Cannot read the DE2 handoff files. Put the four JSON files beside this Python script.')
-
+    st.error('Cannot read the validated ML handoff. Place nghi_dashboard_handoff_1118.json beside this Python script.')
     st.code(str(exc))
-
     st.stop()
 
-
-
-# Verify batch alignment rather than mixing datasets silently.
-
-version = summary.get('topology_version')
-
-if not (graph.get('topology_version') == version == blast.get('topology_version') == topology.get('schema_version')):
-
-    st.error('The graph, metrics and baseline topology have different versions. Do not mix batches.')
-
+if data.get('handoff_status') != 'FINAL_VALIDATED_FOR_DASHBOARD':
+    st.error('The supplied handoff is not marked FINAL_VALIDATED_FOR_DASHBOARD.')
     st.stop()
 
-
-
-new_edges = [e for e in graph['edges'] if e['signal_type']=='NEW_EDGE' and e['observed']]
-
-matched = [e for e in graph['edges'] if e['signal_type']=='MATCHED' and e['observed']]
-
-missing = [e for e in graph['edges'] if e['signal_type']=='MISSING_EDGE']
-
-new_triplets = {(e['source'],e['relationship'],e['target']) for e in new_edges}
-
-if len(new_triplets) != blast['unique_new_relationship_count']:
-
-    st.error('New relationship counts do not match the Blast Radius handoff.')
-
+scenarios = data['dashboard_scenarios_by_name']
+scenario_keys = list(scenarios)
+if not scenario_keys:
+    st.error('No validated scenarios supplied by the ML handoff.')
     st.stop()
 
-
-
-# Direct Blast Radius = distinct directly targeted resources across NEW_EDGE relationships.
-
-direct_targets = {target for _, _, target in new_triplets}
-
-blast_radius_count = len(direct_targets)
-
-if blast_radius_count != blast['distinct_target_count']:
-
-    st.error('Distinct direct target count does not match the DE2 handoff.')
-
-    st.stop()
-
-
-
-with st.sidebar:
-
-    st.title('GUARDIUMONE')
-
-    st.caption('AgentMonitor · executive prototype')
-
-    st.markdown('---')
-
-    st.info('DEMO MODE · Synthetic DE2 batch. Not connected to production telemetry.')
-
-    st.caption('Graph: ' + str(summary['graph_id']))
-
-    st.caption('Proposed topology: ' + str(version))
-
-    st.caption('Baseline approval pending · KRI definitions provisional.')
-
-    with st.expander('Data source details'):
-
-        st.write('Loaded from four handoff files in this folder; reload the page after replacing the batch files.')
-
-        st.code('direct_blast_radius.json\ngraph_edges_for_dashboard.json\napproved_topology.json\nintegration_summary.json')
-
-
-
-# Preserve EXACT section names and major column proportions of the original Scenario 1/2 view.
-
-st.caption('ENTERPRISE AI GOVERNANCE / EXECUTIVE VIEW / DEMO')
-
-st.title('AgentMonitor / Risk Overview')
-
-st.warning('SYNTHETIC DE2 BATCH · Proposed topology is not formally approved. New relationships do not establish malicious behavior.')
-
-
-
-st.markdown('<span class="pill">REVIEW · AUTHORIZATION UNCONFIRMED</span>',unsafe_allow_html=True)
-
-st.subheader('New model relationships detected outside proposed topology')
-
-st.caption(str(summary['graph_id'])+' · '+str(blast['affected_agent_count'])+' agents · Synthetic DE2 batch')
-
-
-
-st.divider()
-
-st.subheader('Four Executive KRIs')
-
-values = [
-
-    ('BLAST RADIUS',f'{blast_radius_count} resources'),
-
-    ('DATA SENSITIVITY','Not available'),
-
-    ('BOUNDARY DRIFT',f"{blast['unique_new_relationship_count']} new edges"),
-
-    ('TOKEN VELOCITY','Not measured'),
-
-
-]
-
-# Executive KRI descriptions appear behind Streamlit's metric-label help icon.
-
-# Definitions are independent of whether this DE2 batch contains a measurement.
-
+# The approved KRI definitions are retained. Only the Data Sensitivity entry
+# and its card are removed; the Token Velocity availability sentence is updated.
 KRI_HELP = {
-
     'BLAST RADIUS': (
-
         'Count of distinct resources directly targeted by NEW_EDGE relationships. '
-
         'Formula: count of unique target IDs across observed new relationships. '
-
         'Repeat signals and multiple agents targeting one resource do not increase the count. '
-
         'No downstream propagation or confirmed compromise is implied.'
-
     ),
-
-    'DATA SENSITIVITY': (
-
-        'Classification of the data or resource involved, using the organization’s '
-
-        'classification policy (for example, Public, Internal, Confidential, Restricted). '
-
-        'This DE2 handoff does not include a classification, so the value is unavailable. '
-
-        'Unknown or unclassified must not be treated as low sensitivity.'
-
-    ),
-
     'BOUNDARY DRIFT': (
-
         'Count of distinct observed source–relationship–target triples absent from the '
-
         'proposed reference topology. Repeat NEW_EDGE signals for the same triple '
-
         'count only once. A new relationship does not automatically mean a policy breach.'
-
     ),
-
     'TOKEN VELOCITY': (
-
         'Sum of recorded LLM input and output tokens in a fixed monitoring window, '
-
         'divided by elapsed window minutes (tokens/min). Compare to similar historical '
-
         'windows before assessing a spike; without enough history, report '
-
         '“Insufficient history.” DE2 interaction counts are not token counts. '
-
-        'This insurance batch has no correlated token-usage measurement.'
-
+        'A validated historical workflow token measurement is available only for the rejected-interaction scenario.'
     ),
+}
+
+# Stable per-scenario event details from ML; never use a missing/velocity event
+# as a token-usage measurement from another workflow.
+DETAIL_PATH = {
+    scenario_keys[0]: ('level_2',),
+    scenario_keys[1]: ('additional_validated_events', 'missing_edge'),
+    scenario_keys[2]: ('additional_validated_events', 'velocity_anomaly'),
+}
+
+def get_detail(key):
+    value = data
+    for part in DETAIL_PATH[key]:
+        value = value[part]
+    return value
 
 
+def nice_entity(value):
+    if value.startswith('agent-'):
+        return 'Agent: ' + value.removeprefix('agent-')
+    if value.startswith('tool:'):
+        return value.split(':')[-1].replace('_', ' ') + ' (tool)'
+    if value.startswith('model:'):
+        return value.split(':')[-1] + ' (model)'
+    return value
+
+
+# Executive-readable explanations, based on the validated ML handoff.
+# These are presentation summaries, never replacement ML measurements.
+SCENARIO_GUIDE = {
+    'REJECTED_INTERACTION': {
+        'short_name': 'Rejected payout action',
+        'what': 'A customer-service AI agent attempted to use a payout approval tool, outside its assigned role of answering policy questions.',
+        'why': 'Rule BL-1 prohibits customer-service agents from approving or sending payouts. DE2 flagged this interaction as rejected.',
+        'unknown': 'The downstream financial outcome was not independently confirmed. Tier 2 reported MEDIUM risk but UNCERTAIN intent.',
+        'focus': 'A policy-rejected connection is not the same as a NEW_EDGE signal.',
+    },
+    'MISSING_EDGE': {
+        'short_name': 'Expected policy lookup missing',
+        'what': 'A policy-status lookup connection that was expected in this customer-service trace was not observed.',
+        'why': 'DE2 produced a MISSING_EDGE signal. The approved relationship exists in the baseline, but it is absent from the selected trace.',
+        'unknown': 'The evidence does not establish why the lookup was absent. Tier 2 analysis was triggered but not executed.',
+        'focus': 'A missing expected connection is different from an unexpected new connection.',
+    },
+    'VELOCITY_ANOMALY': {
+        'short_name': 'Unusual claims-tool activity',
+        'what': 'A claims agent used an approved claim-retrieval connection at a higher interaction rate than its recorded baseline.',
+        'why': 'DE2 flagged 20 interactions versus a baseline of about 2.39 in its five-minute monitoring window.',
+        'unknown': 'The event came from a controlled temporary v3 topology. Its version differs from the restored current v2 topology, and Tier 2 was not executed.',
+        'focus': 'This is DE2 interaction activity, not the Token Velocity KRI measured in tokens/min.',
+    },
 }
 
 
+def kri_explanation(signal_type, name):
+    """Short context next to the card; authoritative numbers stay in the ML payload."""
+    if name == 'BLAST RADIUS':
+        return 'No NEW_EDGE exposure in this evidence set; other anomaly types may still require review.'
+    if name == 'BOUNDARY DRIFT':
+        return {
+            'REJECTED_INTERACTION': 'The finding is a BL-1 policy rejection, not a NEW_EDGE drift signal.',
+            'MISSING_EDGE': 'One approved lookup was absent from this trace; it is not a new connection.',
+            'VELOCITY_ANOMALY': 'The version mismatch came from controlled testing, not a new-edge finding.',
+        }[signal_type]
+    if signal_type == 'REJECTED_INTERACTION':
+        return 'Validated Nov. 17 workflow snapshot, not the current rolling measurement.'
+    if signal_type == 'VELOCITY_ANOMALY':
+        return 'Not measured for this event. The detected interaction rate is a different metric.'
+    return 'No verified workflow-token measurement for this selected event.'
 
-cols = st.columns(4)
 
-for col,(name,value) in zip(cols,values):
+def evidence_summary(scenario, detail):
+    """Exclude evaluator-only guidance from participant-facing evidence JSON."""
+    ev = scenario['evidence']
+    return {
+        'incident_id': ev['incident_id'],
+        'event_type': ev['event_type'],
+        'agent': ev['agent'],
+        'target': ev['target'],
+        'event_time': ev.get('event_time'),
+        'tier1_flagged': ev.get('tier1_flagged'),
+        'tier2_status': ev.get('tier2_status'),
+        'data_classification_status': ev.get('data_classification_status'),
+        'access_outcome': ev.get('access_outcome'),
+        'token_metrics_status': ev.get('token_metrics_status'),
+        'interaction_velocity': ev.get('interaction_velocity'),
+    }
 
-    with col:
 
-        st.metric(name,value,help=KRI_HELP[name])
+def graph_mermaid(scenario_key, focus_event=True):
+    """Approved rectangular Mermaid design. Edge styling reflects event-specific evidence."""
+    graph = data['level_1']['graph']
+    edges = graph['edges']
+    mode = scenarios[scenario_key]['graph_rendering']['anomaly_type']
+    if focus_event:
+        # Level 2: show the relevant local neighborhood, not every baseline edge.
+        # For the selected customer-service event, keep its policy lookup, model, and payout paths.
+        selected_agent = scenarios[scenario_key]['agent']
+        selected_target = scenarios[scenario_key]['evidence']['target']
+        edges = [e for e in edges if (e['source'] == selected_agent and
+                 (mode == 'REJECTED_INTERACTION' or e['target'] == selected_target))]
 
-        st.caption('Measured from DE2 batch' if name in ('BLAST RADIUS','BOUNDARY DRIFT') else 'No source measurement')
-
-
-
-# One graph edge per directed relationship triple. MISSING_EDGE is not plotted as observed.
-
-def mermaid_source():
-
-    base = {(x['source'],x['relationship'],x['target']) for x in topology['approved_edges']}
-
-    observed = {(x['source'],x['relationship'],x['target']) for x in matched + new_edges}
-
-    all_triples = sorted(base | observed)
-
-    entities = sorted({v for e in all_triples for v in (e[0],e[2])})
-
-    node_id = {entity: f'N{i}' for i,entity in enumerate(entities)}
-
-    def label(entity):
-
-        if entity.startswith('agent-'):
-
-            return entity.replace('agent-','Agent: ')
-
-        if entity.startswith('model:'):
-
-            return entity.split(':')[-1] + ' (model)'
-
-        if entity.startswith('tool:'):
-
-            return entity.split(':')[-1] + ' (tool)'
-
-        return entity
-
+    incident = scenarios[scenario_key]['incident']
+    # The graph is the current v2 approved baseline plus the selected live rejected edge.
+    triples = [(e['source'], e['relationship'], e['target']) for e in edges]
+    entities = sorted({x for a, _, b in triples for x in (a, b)})
+    node_ids = {name: f'N{i}' for i, name in enumerate(entities)}
     lines = ['flowchart LR']
-
-    for name,nid in node_id.items():
-
-        safe_label = label(name).replace('"', "'")
-
-        lines.append(f'{nid}["{safe_label}"]')
-
-    green,orange,grey = [],[],[]
-
-    for idx,(src,relation,target) in enumerate(all_triples):
-
-        lines.append(f'{node_id[src]} -->|"{relation}"| {node_id[target]}')
-
-        if (src,relation,target) in new_triplets: orange.append(idx)
-
-        elif (src,relation,target) in observed: green.append(idx)
-
-        else: grey.append(idx)
-
-    if green: lines.append('linkStyle '+','.join(map(str,green))+' stroke:#65a78b,stroke-width:2px;')
-
-    if orange: lines.append('linkStyle '+','.join(map(str,orange))+' stroke:#ff951f,stroke-width:4px;')
-
-    if grey: lines.append('linkStyle '+','.join(map(str,grey))+' stroke:#91959f,stroke-width:2px,stroke-dasharray:5 5;')
-
+    for name, nid in node_ids.items():
+        label = nice_entity(name).replace('"', "'").replace('\n', ' ')
+        lines.append(f'{nid}["{label}"]')
+    green, orange, grey, muted = [], [], [], []
+    for idx, e in enumerate(edges):
+        source, rel, target = triples[idx]
+        if e['approved'] is False and e.get('review_status') == 'POLICY_REJECTED':
+            if mode == 'REJECTED_INTERACTION':
+                rel_label = 'REJECTED / BL-1'
+                orange.append(idx)
+            else:
+                rel_label = 'OTHER EVENT / REJECTED'
+                muted.append(idx)
+        elif e.get('missing_in_selected_trace') and mode in ('REJECTED_INTERACTION', 'MISSING_EDGE'):
+            # This expected policy lookup is not observed in the selected customer-service trace.
+            rel_label = 'MISSING / EXPECTED NOT OBSERVED'
+            grey.append(idx)
+        elif mode == 'VELOCITY_ANOMALY' and e.get('velocity_anomaly_event_id') == incident:
+            rel_label = 'CALLS_TOOL / VELOCITY ANOMALY'
+            orange.append(idx)
+        else:
+            rel_label = str(rel)
+            green.append(idx)
+        safe_relation = rel_label.replace('"', "'")
+        lines.append(f'{node_ids[source]} -->|"{safe_relation}"| {node_ids[target]}')
+    if green:
+        lines.append('linkStyle '+','.join(map(str,green))+' stroke:#65a78b,stroke-width:2px;')
+    if orange:
+        lines.append('linkStyle '+','.join(map(str,orange))+' stroke:#ff951f,stroke-width:4px;')
+    if grey:
+        lines.append('linkStyle '+','.join(map(str,grey))+' stroke:#91959f,stroke-width:3px,stroke-dasharray:5 5;')
+    if muted:
+        lines.append('linkStyle '+','.join(map(str,muted))+' stroke:#637082,stroke-width:1.5px;')
     lines.append('classDef default fill:#10141c,stroke:#677080,color:#f2f2f2;')
-
     return '\n'.join(lines)
 
 
-
-st.divider()
-
-a,b = st.columns([1.45,1])
-
-with a:
-
-    st.subheader('Approved vs. Observed Interaction Graph')
-
-    code=mermaid_source()
-
-    embed = '''<div class="mermaid">'''+html_lib.escape(code)+'''</div><script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";mermaid.initialize({startOnLoad:true,theme:"dark",themeVariables:{background:"#07090e",primaryColor:"#10141c",primaryTextColor:"#eeeeee",lineColor:"#ff951f"}});</script>'''
-
-    components.html(embed,height=450,scrolling=True)
-
-    st.caption('Green: matched in proposed baseline · Orange: new observed relationship')
-
-with b:
-
-    st.subheader('Evidence Signals')
-
-    st.markdown('**Detected activity:** New system/model relationships detected')
-
-    st.markdown('**Agent:** 4 agents (claims, customer support v1/v2, underwriting)')
-
-    st.markdown('**Target system:** 2 model targets (Claude Sonnet 5; GPT-4o)')
-
-    st.markdown('**Reason flagged:** 4 relationship triples absent from proposed topology')
-
-    st.markdown('**Access status:** Observed in synthetic batch; authorization and security outcome unverified')
-
-
-
-
-
-st.divider()
-
-st.subheader('Verified Backend Component Evidence')
-
-st.caption('DE2 handoff batch counts and graph evidence only; live telemetry, Tier 2 composite risk, and human review outcomes were not supplied.')
-
-with st.expander('View Backend Evidence'):
-
-    a1,a2,a3=st.columns(3)
-
-    a1.metric('MATCHED signals',summary['signal_counts']['MATCHED'])
-
-    a2.metric('NEW_EDGE signals',summary['signal_counts']['NEW_EDGE'])
-
-    a3.metric('MISSING_EDGE signals',summary['signal_counts']['MISSING_EDGE'])
-
-    st.write('Reported interactions:', summary['total_interaction_events_reported_by_de2'])
-
-    st.write('Emitted signals:', summary['total_emitted_signals'])
-
-    st.write('Topology version:',version)
-
-    st.write('Baseline approval:',summary['topology_approval_status'])
-
-    st.write('Explicit MISSING_EDGE evidence:',missing)
-
-    st.write('**New relationships:**')
-
-    st.dataframe([{'source':e['source'],'relationship':e['relationship'],'target':e['target'],'signal_count':e['signal_count']} for e in new_edges],width='stretch',hide_index=True)
-
-
-
-st.divider()
-
-st.subheader('Trace Evidence · Structured JSON')
-
-evidence={
-
-    'source':'DE2 synthetic handoff batch',
-
-    'graph_id':summary['graph_id'],
-
-    'topology_version':version,
-
-    'topology_approval_status':summary['topology_approval_status'],
-
-    'event_type':'NEW_EDGE',
-
-    'new_relationships':blast['new_relationships'],
-
-    'direct_blast_radius':{
-
-        'formula':'Count of distinct directly targeted resources',
-
-        'value':blast_radius_count,
-
-        'unit':'resources',
-
-        'distinct_target_ids':sorted(direct_targets),
-
-    },
-
-    'source_agents_in_new_relationships':blast['affected_agent_count'],
-
-    'signal_counts':summary['signal_counts'],
-
-    'missing_edge_signals':missing,
-
-    'data_sensitivity':None,
-
-    'token_velocity':None,
-
-    'downstream_impact_assessed':False,
-
-}
-
-st.json(evidence,expanded=True)
-
-st.download_button('Export scenario evidence',data=json.dumps(evidence,indent=2),file_name='de2_batch_evidence.json',mime='application/json')
-
-
-# Optional, independent workflow-level Token Velocity snapshot from the ML team.
-# This MUST NOT be attributed to the DE2 insurance batch without verified matching IDs.
-def read_token_velocity_snapshot(path):
-    try:
-        with path.open(encoding='utf-8') as handle:
-            payload = json.load(handle)
-    except (OSError, ValueError, UnicodeError) as exc:
-        return None, f'Cannot read token snapshot: {exc}'
-
-    if not isinstance(payload, dict):
-        return None, 'Token snapshot must contain one JSON object.'
-    status = payload.get('status')
-    if status not in ('MEASURED', 'WARNING', 'NOT_MEASURED'):
-        return None, 'Unrecognized Token Velocity measurement status.'
-    if status in ('MEASURED', 'WARNING'):
-        rate = payload.get('rate_tokens_per_minute')
-        window = payload.get('window_minutes')
-        if (isinstance(rate, bool) or not isinstance(rate, (int, float))
-                or not isfinite(rate) or rate < 0):
-            return None, 'Measured token rate must be a finite nonnegative number.'
-        if isinstance(window, bool) or not isinstance(window, int) or window <= 0:
-            return None, 'Measured observation window must be a positive integer.'
-        if not isinstance(payload.get('workflow_id'), str) or not payload['workflow_id']:
-            return None, 'Measured snapshot must identify a workflow.'
-        if payload.get('data_mode') != 'RECORDED_USAGE':
-            return None, 'Measured snapshot must identify RECORDED_USAGE.'
-        if payload.get('measurement_basis') != 'Recorded workflow token usage':
-            return None, 'Measured snapshot must identify the expected measurement basis.'
-        for field in ('spike_alert', 'exhaustion_alert'):
-            if type(payload.get(field)) is not bool:
-                return None, f'{field} must be a boolean.'
-        if status == 'WARNING' and not (payload['spike_alert'] or payload['exhaustion_alert']):
-            return None, 'WARNING requires a spike or exhaustion alert.'
-        if status == 'MEASURED' and (payload['spike_alert'] or payload['exhaustion_alert']):
-            return None, 'MEASURED cannot carry active warnings.'
-        if not isinstance(payload.get('as_of_utc'), str) or not payload['as_of_utc']:
-            return None, 'Measured snapshot requires an observation timestamp.'
-    return payload, None
-
-st.divider()
-st.subheader('Token Velocity · Separate ML Workflow Evidence')
-st.caption(
-    'Standalone workflow measurement from ML Cost Intelligence. '
-    'Not linked to the synthetic insurance DE2 graph or its 255 interactions.'
-)
-token_path = ROOT / 'token_velocity_kri.json'
-if not token_path.is_file():
-    st.info(
-        'No Token Velocity export has been supplied for this demonstration. '
-        'Place a validated ML exporter response in token_velocity_kri.json alongside this dashboard.'
+def render_mermaid(key, focus_event=True):
+    code = graph_mermaid(key, focus_event=focus_event)
+    embed = (
+        '<div class="mermaid">'+html_lib.escape(code)+'</div>'
+        '<script type="module">'
+        'import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";'
+        'mermaid.initialize({startOnLoad:true,theme:"dark",'
+        'themeVariables:{background:"#07090e",primaryColor:"#10141c",'
+        'primaryTextColor:"#eeeeee",lineColor:"#ff951f"}});'
+        '</script>'
     )
+    components.html(embed, height=450, scrolling=True)
+
+
+if 'selected_scenario' not in st.session_state or st.session_state.selected_scenario not in scenarios:
+    st.session_state.selected_scenario = data['display_contract']['default_selected_scenario_key']
+if 'view_level' not in st.session_state:
+    st.session_state.view_level = 1
+
+with st.sidebar:
+    st.title('GUARDIUMONE')
+    st.caption('AgentMonitor · executive prototype')
+    st.markdown('---')
+    chosen = st.selectbox('Scenario', scenario_keys,
+                          index=scenario_keys.index(st.session_state.selected_scenario),
+                          format_func=lambda k: SCENARIO_GUIDE[scenarios[k]['graph_rendering']['anomaly_type']]['short_name'])
+    if chosen != st.session_state.selected_scenario:
+        st.session_state.selected_scenario = chosen
+        st.session_state.view_level = 1
+        st.rerun()
+    if st.session_state.view_level == 2:
+        if st.button('← Back to overview', width='stretch'):
+            st.session_state.view_level = 1
+            st.rerun()
+    st.info('Validated live sandbox evidence · Not a production incident.')
+    st.caption('Choose a scenario, review Level 1, then investigate its evidence in Level 2.')
+    st.caption('Approved topology: ' + data['current_environment']['current_topology_version'])
+    st.caption('Measurement counts describe the selected validated evidence package, not the full telemetry stream.')
+    with st.expander('Data source details'):
+        st.write('Processed, validated ML/KRI handoff; the dashboard does not read raw DE2 data.')
+        st.code('nghi_dashboard_handoff_1118.json')
+        st.caption('Handoff revision: ' + data['handoff_revision'])
+
+key = st.session_state.selected_scenario
+scenario = scenarios[key]
+signal_type = scenario['graph_rendering']['anomaly_type']
+guide = SCENARIO_GUIDE[signal_type]
+detail = get_detail(key)
+incident = scenario['incident']
+
+st.caption('ENTERPRISE AI GOVERNANCE / EXECUTIVE VIEW / VALIDATED SANDBOX')
+if st.session_state.view_level == 1:
+    st.caption('LEVEL 1 / EXECUTIVE OVERVIEW')
+    st.title('AI Risk Overview')
+    st.markdown(f"### {scenario['headline']}")
+    st.markdown('<div class="summary-lead">' + html_lib.escape(guide['what']) + '</div>',
+                unsafe_allow_html=True)
+    status_label = {
+        'REJECTED_INTERACTION': 'Policy rejected · BL-1 · Review required',
+        'MISSING_EDGE': 'Expected lookup missing · Review required',
+        'VELOCITY_ANOMALY': 'Unusual interaction activity · Review required',
+    }[signal_type]
+    st.markdown('<div class="status-line"><strong>' + html_lib.escape(status_label) +
+                '</strong> · Validated live sandbox evidence (not production)</div>',
+                unsafe_allow_html=True)
+    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
+
+    st.subheader('Three Executive KRIs')
+    risk = scenario['risk_data']
+    values = [
+        ('BLAST RADIUS', risk['blast']),
+        ('BOUNDARY DRIFT', risk['drift']),
+        ('TOKEN VELOCITY', risk['tokens']),
+    ]
+    for col, (name, value) in zip(st.columns(3, gap='medium'), values):
+        with col:
+            st.metric(name, value, help=KRI_HELP[name])
+    # Short explanation avoids interpreting a zero as confirmation of safety.
+    with st.expander('What do these measurements mean?'):
+        for name, _ in values:
+            st.markdown('**' + name.title() + ':** ' + kri_explanation(signal_type, name))
+        st.caption('Hover over each KRI label for its original calculation definition.')
+
+    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
+    left, right = st.columns([1.4, 1], gap='large')
+    with left:
+        st.subheader('Connection to review')
+        render_mermaid(key, focus_event=True)
+        if signal_type == 'REJECTED_INTERACTION':
+            st.caption('Orange: policy-rejected payout connection · Green: approved connection · Gray dashed: expected lookup missing from this trace')
+        elif signal_type == 'MISSING_EDGE':
+            st.caption('Gray dashed: approved connection not observed in this trace')
+        else:
+            st.caption('Orange: approved tool connection with an unusual interaction rate; not a NEW_EDGE')
+        st.button('Investigate this event →', type='primary', width='stretch',
+                  on_click=lambda: st.session_state.update(view_level=2))
+        with st.expander('View full interaction graph (all approved connections)'):
+            st.caption('Full approved topology is available as additional context. It is not the selected event trace.')
+            render_mermaid(key, focus_event=False)
+            st.caption('Green: approved baseline · Orange: selected flagged activity · Gray dashed: expected but missing · Muted: separate event')
+    with right:
+        st.subheader('Why it matters')
+        st.markdown('<div class="focus-note">' + html_lib.escape(guide['why']) + '</div>',
+                    unsafe_allow_html=True)
+        st.markdown('**What remains unknown**')
+        st.write(guide['unknown'])
+        with st.expander('Evidence signals and identifiers'):
+            st.write('Agent:', nice_entity(scenario['agent']))
+            st.write('Target:', nice_entity(scenario['evidence']['target']))
+            st.write('Signal:', scenario['evidence']['event_type'])
+            st.write('Event ID:', incident)
+            if signal_type == 'REJECTED_INTERACTION':
+                st.write('Direct incident scope:', '1 agent / 1 target (different from NEW_EDGE Blast Radius)')
+            elif signal_type == 'VELOCITY_ANOMALY':
+                iv = scenario['evidence']['interaction_velocity']
+                st.write('DE2 interaction rate:', f"{iv['current_rate']} vs {iv['baseline_rate']:.2f} baseline")
+                st.caption('Interaction velocity is NOT token velocity.')
+
+    with st.expander('Backend evidence · Optional technical detail'):
+        st.caption('The full backend details refer only to the selected validated event.')
+        st.json(detail.get('backend_processing', {}), expanded=False)
+        st.json(evidence_summary(scenario, detail), expanded=False)
+        st.download_button('Export scenario evidence', json.dumps(scenario['evidence'], indent=2),
+                           file_name=f'{scenario["evidence"]["event_type"].lower()}_evidence.json',
+                           mime='application/json')
 else:
-    token_snapshot, token_error = read_token_velocity_snapshot(token_path)
-    if token_error:
-        st.warning(token_error + ' Token Velocity remains not measured.')
-    elif token_snapshot['status'] == 'NOT_MEASURED':
-        st.metric('Workflow Token Velocity', 'Not measured')
-        st.caption('ML exporter: ' + str(token_snapshot.get('reason', 'No verified measurement available.')))
-    else:
-        st.metric('Workflow Token Velocity', f"{token_snapshot['rate_tokens_per_minute']:,.2f} tokens/min")
-        if token_snapshot['status'] == 'WARNING':
-            st.warning('ML exporter reports a token rate spike or projected budget exhaustion.')
-        st.write('Workflow:', token_snapshot['workflow_id'])
-        st.write('Observation window:', str(token_snapshot['window_minutes']) + ' minutes')
-        st.write('Observed at (UTC):', token_snapshot['as_of_utc'])
-        st.write('Baseline ready:', token_snapshot.get('baseline_ready'))
-        st.write('Spike alert:', token_snapshot['spike_alert'])
-        st.write('Projected exhaustion alert:', token_snapshot['exhaustion_alert'])
-        st.caption('Recorded usage with matching settled reconciliation and reservation records; not independently verified provider telemetry.')
-    if token_snapshot is not None:
-        with st.expander('View standalone Token Velocity JSON'):
-            st.json(token_snapshot)
-        st.download_button(
-            'Export standalone Token Velocity evidence',
-            data=json.dumps(token_snapshot, indent=2),
-            file_name='token_velocity_evidence.json', mime='application/json'
-        )
+    st.title('Connection Investigation')
+    st.caption('LEVEL 2 / EVENT INVESTIGATION · Validated sandbox evidence')
+    st.subheader(scenario['headline'])
+    event = detail['selected_event']
+    st.markdown('<span class="pill">EVENT-LEVEL EVIDENCE</span>', unsafe_allow_html=True)
+    # Executive summary comes before the technical identifiers.
+    st.subheader('What happened?')
+    st.write(guide['what'])
+    st.subheader('Why was it flagged?')
+    st.write(guide['why'])
+    st.subheader('What is still unknown?')
+    st.write(guide['unknown'])
+    if signal_type == 'REJECTED_INTERACTION':
+        st.caption('ML Tier 2: MEDIUM composite risk; intent UNCERTAIN. '
+                   'The runtime ALLOW context does not override the DE2 BL-1 rejection.')
+    elif signal_type == 'VELOCITY_ANOMALY':
+        st.caption('The temporary test topology was v3; the current approved sandbox is v2.')
+    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
+    st.subheader('Three Executive KRIs · Selected Event')
+    risk = scenario['risk_data']
+    for col, (name, value) in zip(st.columns(3), [
+        ('BLAST RADIUS', risk['blast']),
+        ('BOUNDARY DRIFT', risk['drift']),
+        ('TOKEN VELOCITY', risk['tokens']),
+    ]):
+        with col:
+            st.metric(name, value, help=KRI_HELP[name])
+            st.caption(kri_explanation(signal_type, name))
+
+    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
+    a, b = st.columns([1.45, 1])
+    with a:
+        # Level 2 adds event-specific investigation evidence instead of repeating
+        # the Level 1 relationship graph. All values come from the ML handoff.
+        st.subheader('Event Evidence Trail')
+        st.markdown('**Source agent**')
+        st.write(nice_entity(event['source_entity_id']))
+        st.markdown('**Relationship / target**')
+        st.write(event['relationship_type'] + ' → ' + nice_entity(event['target_entity_id']))
+        if signal_type == 'REJECTED_INTERACTION':
+            context = detail['backend_processing']['runtime_context']
+            observed = context['observed_action']
+            st.markdown('**Observed tool action**')
+            st.write(observed['operation'] + ' · ' + observed['tool'].replace('_', ' '))
+            st.markdown('**Declared responsibility**')
+            st.write(detail['selected_event']['declared_purpose'])
+            st.error('Policy rejection · ' + str(detail['backend_processing']['tier1_evidence']['policy_id']))
+            st.caption('The backend reported a rejected interaction. A completed payout or transfer is not confirmed.')
+        elif signal_type == 'MISSING_EDGE':
+            st.markdown('**Expected behavior**')
+            st.write('Approved policy-status lookup should appear in the selected trace.')
+            st.markdown('**Observed trace result**')
+            st.warning('Expected connection not observed · MISSING_EDGE')
+            st.caption('The reason for the missing relationship has not been established.')
+        else:
+            v = scenario['evidence']['interaction_velocity']
+            c1, c2, c3 = st.columns(3)
+            c1.metric('RECORDED RATE', f"{v['current_rate']:g}")
+            c2.metric('BASELINE', f"{v['baseline_rate']:.2f}")
+            c3.metric('THRESHOLD', f"{v['threshold']:g}")
+            st.warning(f"Interaction-rate anomaly · {v['window_minutes']:g}-minute monitoring window")
+            st.caption('This is DE2 interaction activity, not LLM Token Velocity.')
+            st.caption('Event topology: ' + scenario['evidence']['event_topology_version'])
+            st.caption('Current topology: ' + scenario['evidence']['current_topology_version'])
+        st.caption('Event-specific evidence from the validated ML handoff; no new connections or metrics were inferred.')
+    with b:
+        st.subheader('Evidence Signals')
+        st.markdown('**Agent:** ' + nice_entity(event['source_entity_id']))
+        st.markdown('**Target:** ' + nice_entity(event['target_entity_id']))
+        st.markdown('**Detected signal:** ' + event['signal_type'])
+        tier1 = detail.get('backend_processing', {}).get('tier1_evidence', {})
+        processing = detail.get('backend_processing', {})
+        tier2_status = processing.get('tier2_execution_status', processing.get('status', 'Not supplied'))
+        st.markdown('**Tier 1 flagged:** ' + ('Yes' if tier1.get('tier1_flagged') else 'No'))
+        st.markdown('**Tier 2 status:** ' + str(tier2_status).replace('_', ' ').title())
+        if signal_type == 'REJECTED_INTERACTION':
+            st.markdown('**Policy finding:** REJECTED / BL-1')
+            st.caption('Direct incident scope: 1 agent / 1 target. This is not the NEW_EDGE Blast Radius KRI.')
+        elif signal_type == 'MISSING_EDGE':
+            st.caption('The expected lookup connection is missing from the selected trace.')
+        else:
+            st.caption('Velocity event generated under a controlled temporary topology.')
+        st.caption('No automatic containment action is asserted.')
+
+    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
+    st.subheader('Technical Evidence')
+    st.caption('Optional supporting material, kept out of the main investigation flow.')
+    with st.expander('Event details and identifiers'):
+        st.write('Event ID:', incident)
+        st.write('Trace ID:', event.get('trace_id', 'Not supplied'))
+        st.write('Span ID:', event.get('span_id') or 'Not supplied')
+        st.write('Evidence source:', scenario['evidence']['source'])
+        st.json(event, expanded=False)
+    with st.expander('Tier 1 / Tier 2 backend evidence'):
+        st.json(processing, expanded=False)
+    with st.expander('Selected event JSON'):
+        st.json(detail, expanded=False)
+    st.download_button('Export selected event evidence', json.dumps(detail, indent=2),
+                       file_name=f'{event["signal_type"].lower()}_event.json', mime='application/json')
+
+with st.expander('Data provenance'):
+    st.caption('Validated ML/KRI handoff · selected evidence set only; not the full telemetry stream.')
+    st.write('Handoff:', data['handoff_revision'])
+    st.write('Current topology:', data['current_environment']['current_topology_version'])
+    st.write('Current model mode:', data['current_environment']['current_model_mode'])
+    st.caption('The controlled velocity event used temporary v3 topology; it is not the current baseline.')
+# Do not display the full handoff in participant mode: it includes evaluator-only
+# recommended decisions. Keep the validated source JSON in the app directory.
+
