@@ -358,20 +358,13 @@ if st.session_state.view_level == 1:
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
     left, right = st.columns([1.4, 1], gap='large')
     with left:
-        st.subheader('Connection to review')
-        render_mermaid(key, focus_event=True)
-        if signal_type == 'REJECTED_INTERACTION':
-            st.caption('Orange: policy-rejected payout connection · Green: approved connection · Gray dashed: expected lookup missing from this trace')
-        elif signal_type == 'MISSING_EDGE':
-            st.caption('Gray dashed: approved connection not observed in this trace')
-        else:
-            st.caption('Orange: approved tool connection with an unusual interaction rate; not a NEW_EDGE')
+        st.subheader('Approved vs. Observed Interaction Graph')
+        st.caption('Current approved baseline and validated flagged activity; not a complete trace of this event.')
+        # Level 1: full graph always visible. Avoid rendering Mermaid inside a collapsed expander.
+        render_mermaid(key, focus_event=False)
+        st.caption('Green: approved baseline · Orange: selected flagged connection · Gray dashed: expected but missing in the selected trace · Muted: another event')
         st.button('Investigate this event →', type='primary', width='stretch',
                   on_click=lambda: st.session_state.update(view_level=2))
-        with st.expander('View full interaction graph (all approved connections)'):
-            st.caption('Full approved topology is available as additional context. It is not the selected event trace.')
-            render_mermaid(key, focus_event=False)
-            st.caption('Green: approved baseline · Orange: selected flagged activity · Gray dashed: expected but missing · Muted: separate event')
     with right:
         st.subheader('Why it matters')
         st.markdown('<div class="focus-note">' + html_lib.escape(guide['why']) + '</div>',
@@ -430,8 +423,16 @@ else:
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
     a, b = st.columns([1.45, 1])
     with a:
-        # Level 2 adds event-specific investigation evidence instead of repeating
-        # the Level 1 relationship graph. All values come from the ML handoff.
+        # Level 2: show only the selected agent's relevant connection(s).
+        # This is intentionally different from Level 1's full approved topology.
+        st.subheader('Selected Event Connection')
+        render_mermaid(key, focus_event=True)
+        if signal_type == 'REJECTED_INTERACTION':
+            st.caption('Orange: rejected payout action · Gray dashed: approved lookup absent from this trace')
+        elif signal_type == 'MISSING_EDGE':
+            st.caption('Gray dashed: expected policy lookup not observed in this trace')
+        else:
+            st.caption('Orange: approved claim-retrieval connection flagged for unusual interaction rate')
         st.subheader('Event Evidence Trail')
         st.markdown('**Source agent**')
         st.write(nice_entity(event['source_entity_id']))
