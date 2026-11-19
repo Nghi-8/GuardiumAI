@@ -35,7 +35,7 @@ h1,h2,h3{letter-spacing:-.025em}
 </style>''', unsafe_allow_html=True)
 
 try:
-    with (ROOT / 'nghi_dashboard_handoff_1118.json').open(encoding='utf-8-sig') as handle:
+    with (ROOT / 'nghi_dashboard_handoff_1118.v2.json').open(encoding='utf-8-sig') as handle:
         data = json.load(handle)
 except (OSError, ValueError) as exc:
     st.error('Cannot read the validated ML handoff. Place nghi_dashboard_handoff_1118.json beside this Python script.')
