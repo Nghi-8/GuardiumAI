@@ -79,7 +79,7 @@ KRI_HELP = {
 # as a token-usage measurement from another workflow.
 DETAIL_PATH = {
     scenario_keys[0]: ('level_2',),
-    scenario_keys[1]: ('additional_validated_events', 'missing_edge'),
+    scenario_keys[1]: ('additional_validated_events', 'graph_boundary_anomaly'),
     scenario_keys[2]: ('additional_validated_events', 'velocity_anomaly'),
 }
 
@@ -110,38 +110,40 @@ SCENARIO_GUIDE = {
         'unknown': 'The downstream financial outcome was not independently confirmed. Tier 2 reported MEDIUM risk but UNCERTAIN intent.',
         'focus': 'A policy-rejected connection is not the same as a NEW_EDGE signal.',
     },
-    'MISSING_EDGE': {
-        'short_name': 'Expected policy lookup missing',
-        'what': 'A policy-status lookup connection that was expected in this customer-service trace was not observed.',
-        'why': 'DE2 produced a MISSING_EDGE signal. The approved relationship exists in the baseline, but it is absent from the selected trace.',
-        'unknown': 'The evidence does not establish why the lookup was absent. Tier 2 analysis was triggered but not executed.',
-        'focus': 'A missing expected connection is different from an unexpected new connection.',
+    'GRAPH_BOUNDARY_ANOMALY': {
+        'short_name': 'Graph boundary anomaly',
+        'what': 'A claims-processing agent used an unapproved AI model, while two expected claim-processing tool connections were absent from the same trace.',
+        'why': 'DE2 detected one NEW_EDGE to an unapproved model and two MISSING_EDGE signals for fetch claim and verify coverage. Tier 1 flagged the new connection as a graph and policy anomaly.',
+        'unknown': 'The downstream effect has not been assessed. Tier 2 was triggered for all three findings but model execution was not run.',
+        'focus': 'This trace contains one newly observed model connection and two missing expected tool connections.',
     },
     'VELOCITY_ANOMALY': {
         'short_name': 'Unusual claims-tool activity',
         'what': 'A claims agent used an approved claim-retrieval connection at a higher interaction rate than its recorded baseline.',
         'why': 'DE2 flagged 20 interactions versus a baseline of about 2.39 in its five-minute monitoring window.',
-        'unknown': 'The event came from a controlled temporary v3 topology. Its version differs from the restored current v2 topology, and Tier 2 was not executed.',
+        'unknown': 'The event came from a controlled temporary velocity-test topology. Its version differs from the restored current v3 Qwen topology, and Tier 2 was not executed.',
         'focus': 'This is DE2 interaction activity, not the Token Velocity KRI measured in tokens/min.',
     },
 }
 
 
 def kri_explanation(signal_type, name):
-    """Short context next to the card; authoritative numbers stay in the ML payload."""
+    """Short context next to the card; authoritative values remain ML-provided."""
     if name == 'BLAST RADIUS':
-        return 'No NEW_EDGE exposure in this evidence set; other anomaly types may still require review.'
+        if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+            return 'One agent reached one unapproved model directly; downstream impact is not assessed.'
+        return 'No NEW_EDGE exposure for this event; other anomaly types can still require review.'
     if name == 'BOUNDARY DRIFT':
         return {
-            'REJECTED_INTERACTION': 'The finding is a BL-1 policy rejection, not a NEW_EDGE drift signal.',
-            'MISSING_EDGE': 'One approved lookup was absent from this trace; it is not a new connection.',
-            'VELOCITY_ANOMALY': 'The version mismatch came from controlled testing, not a new-edge finding.',
+            'REJECTED_INTERACTION': 'This is a BL-1 policy rejection, not a NEW_EDGE drift signal.',
+            'GRAPH_BOUNDARY_ANOMALY': 'One new model connection and two missing expected tool connections in one trace.',
+            'VELOCITY_ANOMALY': 'The version mismatch comes from a controlled velocity test.',
         }[signal_type]
     if signal_type == 'REJECTED_INTERACTION':
-        return 'Validated Nov. 17 workflow snapshot, not the current rolling measurement.'
+        return 'Validated Nov. 17 workflow snapshot, not a current rolling measurement.'
     if signal_type == 'VELOCITY_ANOMALY':
-        return 'Not measured for this event. The detected interaction rate is a different metric.'
-    return 'No verified workflow-token measurement for this selected event.'
+        return 'Not measured for this event; DE2 interaction rate is a separate metric.'
+    return 'No verified workflow-token measurement was captured for this trace.'
 
 
 def evidence_summary(scenario, detail):
@@ -162,58 +164,72 @@ def evidence_summary(scenario, detail):
     }
 
 
-def graph_mermaid(scenario_key, focus_event=True):
-    """Approved rectangular Mermaid design. Edge styling reflects event-specific evidence."""
-    graph = data['level_1']['graph']
-    edges = graph['edges']
-    mode = scenarios[scenario_key]['graph_rendering']['anomaly_type']
-    if focus_event:
-        # Level 2: show the relevant local neighborhood, not every baseline edge.
-        # For the selected customer-service event, keep its policy lookup, model, and payout paths.
-        selected_agent = scenarios[scenario_key]['agent']
-        selected_target = scenarios[scenario_key]['evidence']['target']
-        edges = [e for e in edges if (e['source'] == selected_agent and
-                 (mode == 'REJECTED_INTERACTION' or e['target'] == selected_target))]
+def graph_edges_for_view(scenario_key, focus_event):
+    """Full approved network for Level 1; exact scenario relationships for Level 2."""
+    edges = data['level_1']['graph']['edges']
+    if not focus_event:
+        return edges
+    states = scenarios[scenario_key]['graph_rendering'].get('edge_states') or []
+    if states:
+        relevant = {(item['source'], item['target']) for item in states}
+        return [edge for edge in edges if (edge['source'], edge['target']) in relevant]
+    selected_agent = scenarios[scenario_key]['agent']
+    selected_target = scenarios[scenario_key]['evidence']['target']
+    return [edge for edge in edges if edge['source'] == selected_agent
+            and edge['target'] == selected_target]
 
-    incident = scenarios[scenario_key]['incident']
-    # The graph is the current v2 approved baseline plus the selected live rejected edge.
+
+def edge_display(edge, scenario_key):
+    """Label and style per validated ML edge state, not inferred from historical observed flags."""
+    scenario = scenarios[scenario_key]
+    mode = scenario['graph_rendering']['anomaly_type']
+    states = scenario['graph_rendering'].get('edge_states') or []
+    state = next((s for s in states if s['source'] == edge['source']
+                  and s['target'] == edge['target']), None)
+    if state:
+        state_code = state['state']
+        if state_code in ('OBSERVED_NOT_APPROVED_POLICY_REJECTED', 'OBSERVED_NOT_APPROVED_NEW_EDGE'):
+            return state['label'], 'orange'
+        if state_code in ('APPROVED_NOT_OBSERVED_IN_SELECTED_TRACE',
+                          'APPROVED_BASELINE_NOT_OBSERVED_IN_SELECTED_TRACE'):
+            return state['label'], 'grey'
+        if state_code == 'APPROVED_AND_OBSERVED':
+            return state['label'], 'green'
+    if mode == 'VELOCITY_ANOMALY' and (
+        edge['source'] == scenario['agent'] and
+        edge['target'] == scenario['evidence']['target']
+    ):
+        return 'VELOCITY ANOMALY', 'orange'
+    # A flagged edge from another scenario should NOT be highlighted as the selected finding.
+    if edge.get('approved') is False:
+        return 'OTHER VALIDATED EVENT', 'muted'
+    return 'APPROVED BASELINE', 'green'
+
+
+def graph_mermaid(scenario_key, focus_event=True):
+    """Mermaid directed graph with scenario-scoped evidence styling."""
+    edges = graph_edges_for_view(scenario_key, focus_event)
     triples = [(e['source'], e['relationship'], e['target']) for e in edges]
-    entities = sorted({x for a, _, b in triples for x in (a, b)})
+    entities = sorted({node for src, _, dst in triples for node in (src, dst)})
     node_ids = {name: f'N{i}' for i, name in enumerate(entities)}
     lines = ['flowchart LR']
     for name, nid in node_ids.items():
         label = nice_entity(name).replace('"', "'").replace('\n', ' ')
         lines.append(f'{nid}["{label}"]')
-    green, orange, grey, muted = [], [], [], []
-    for idx, e in enumerate(edges):
-        source, rel, target = triples[idx]
-        if e['approved'] is False and e.get('review_status') == 'POLICY_REJECTED':
-            if mode == 'REJECTED_INTERACTION':
-                rel_label = 'REJECTED / BL-1'
-                orange.append(idx)
-            else:
-                rel_label = 'OTHER EVENT / REJECTED'
-                muted.append(idx)
-        elif e.get('missing_in_selected_trace') and mode in ('REJECTED_INTERACTION', 'MISSING_EDGE'):
-            # This expected policy lookup is not observed in the selected customer-service trace.
-            rel_label = 'MISSING / EXPECTED NOT OBSERVED'
-            grey.append(idx)
-        elif mode == 'VELOCITY_ANOMALY' and e.get('velocity_anomaly_event_id') == incident:
-            rel_label = 'CALLS_TOOL / VELOCITY ANOMALY'
-            orange.append(idx)
-        else:
-            rel_label = str(rel)
-            green.append(idx)
-        safe_relation = rel_label.replace('"', "'")
-        lines.append(f'{node_ids[source]} -->|"{safe_relation}"| {node_ids[target]}')
-    if green:
-        lines.append('linkStyle '+','.join(map(str,green))+' stroke:#65a78b,stroke-width:2px;')
-    if orange:
-        lines.append('linkStyle '+','.join(map(str,orange))+' stroke:#ff951f,stroke-width:4px;')
-    if grey:
-        lines.append('linkStyle '+','.join(map(str,grey))+' stroke:#91959f,stroke-width:3px,stroke-dasharray:5 5;')
-    if muted:
-        lines.append('linkStyle '+','.join(map(str,muted))+' stroke:#637082,stroke-width:1.5px;')
+    styles = {'green': [], 'orange': [], 'grey': [], 'muted': []}
+    for idx, edge in enumerate(edges):
+        label, status = edge_display(edge, scenario_key)
+        label = label.replace('"', "'")
+        lines.append(f'{node_ids[edge["source"]]} -->|"{label}"| {node_ids[edge["target"]]}')
+        styles[status].append(idx)
+    for kind, css in (
+        ('green', 'stroke:#65a78b,stroke-width:2px;'),
+        ('orange', 'stroke:#ff951f,stroke-width:4px;'),
+        ('grey', 'stroke:#91959f,stroke-width:3px,stroke-dasharray:5 5;'),
+        ('muted', 'stroke:#637082,stroke-width:1.5px;'),
+    ):
+        if styles[kind]:
+            lines.append('linkStyle ' + ','.join(map(str, styles[kind])) + ' ' + css)
     lines.append('classDef default fill:#10141c,stroke:#677080,color:#f2f2f2;')
     return '\n'.join(lines)
 
@@ -221,26 +237,14 @@ def graph_mermaid(scenario_key, focus_event=True):
 def render_mermaid(key, focus_event=True):
     """Render Mermaid explicitly; show the same edges if its CDN is unavailable."""
     code = graph_mermaid(key, focus_event=focus_event)
-    mode = scenarios[key]['graph_rendering']['anomaly_type']
-    edges = data['level_1']['graph']['edges']
-    if focus_event:
-        selected_agent = scenarios[key]['agent']
-        selected_target = scenarios[key]['evidence']['target']
-        edges = [e for e in edges if e['source'] == selected_agent and
-                 (mode == 'REJECTED_INTERACTION' or e['target'] == selected_target)]
+    edges = graph_edges_for_view(key, focus_event)
     fallback_rows = []
-    for e in edges:
-        if e['approved'] is False and e.get('review_status') == 'POLICY_REJECTED':
-            state = 'REJECTED / BL-1' if mode == 'REJECTED_INTERACTION' else 'OTHER REJECTED EVENT'
-            accent = '#ff951f' if mode == 'REJECTED_INTERACTION' else '#637082'
-        elif e.get('missing_in_selected_trace') and mode in ('REJECTED_INTERACTION', 'MISSING_EDGE'):
-            state, accent = 'MISSING / EXPECTED', '#b1b4bd'
-        elif mode == 'VELOCITY_ANOMALY' and e.get('velocity_anomaly_event_id') == scenarios[key]['incident']:
-            state, accent = 'VELOCITY ANOMALY', '#ff951f'
-        else:
-            state, accent = e['relationship'], '#65a78b'
-        source = html_lib.escape(nice_entity(e['source']))
-        target = html_lib.escape(nice_entity(e['target']))
+    for edge in edges:
+        state, style = edge_display(edge, key)
+        accent = {'green': '#65a78b', 'orange': '#ff951f',
+                  'grey': '#b1b4bd', 'muted': '#637082'}[style]
+        source = html_lib.escape(nice_entity(edge['source']))
+        target = html_lib.escape(nice_entity(edge['target']))
         fallback_rows.append(
             f'<div class="edge-row" style="--accent:{accent}">'
             f'<span class="node">{source}</span>'
@@ -331,7 +335,7 @@ if st.session_state.view_level == 1:
                 unsafe_allow_html=True)
     status_label = {
         'REJECTED_INTERACTION': 'Policy rejected · BL-1 · Review required',
-        'MISSING_EDGE': 'Expected lookup missing · Review required',
+        'GRAPH_BOUNDARY_ANOMALY': 'Unapproved model + two missing steps · Review required',
         'VELOCITY_ANOMALY': 'Unusual interaction activity · Review required',
     }[signal_type]
     st.markdown('<div class="status-line"><strong>' + html_lib.escape(status_label) +
@@ -376,6 +380,8 @@ if st.session_state.view_level == 1:
             st.write('Target:', nice_entity(scenario['evidence']['target']))
             st.write('Signal:', scenario['evidence']['event_type'])
             st.write('Event ID:', incident)
+            if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+                st.write('Graph findings:', '1 NEW_EDGE and 2 MISSING_EDGE signals in the same trace')
             if signal_type == 'REJECTED_INTERACTION':
                 st.write('Direct incident scope:', '1 agent / 1 target (different from NEW_EDGE Blast Radius)')
             elif signal_type == 'VELOCITY_ANOMALY':
@@ -394,7 +400,7 @@ else:
     st.title('Connection Investigation')
     st.caption('LEVEL 2 / EVENT INVESTIGATION · Validated sandbox evidence')
     st.subheader(scenario['headline'])
-    event = detail['selected_event']
+    event = detail['primary_event'] if signal_type == 'GRAPH_BOUNDARY_ANOMALY' else detail['selected_event']
     st.markdown('<span class="pill">EVENT-LEVEL EVIDENCE</span>', unsafe_allow_html=True)
     # Executive summary comes before the technical identifiers.
     st.subheader('What happened?')
@@ -407,7 +413,7 @@ else:
         st.caption('ML Tier 2: MEDIUM composite risk; intent UNCERTAIN. '
                    'The runtime ALLOW context does not override the DE2 BL-1 rejection.')
     elif signal_type == 'VELOCITY_ANOMALY':
-        st.caption('The temporary test topology was v3; the current approved sandbox is v2.')
+        st.caption('The temporary velocity-test topology differs from the current approved v3 Qwen sandbox.')
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
     st.subheader('Three Executive KRIs · Selected Event')
     risk = scenario['risk_data']
@@ -429,8 +435,8 @@ else:
         render_mermaid(key, focus_event=True)
         if signal_type == 'REJECTED_INTERACTION':
             st.caption('Orange: rejected payout action · Gray dashed: approved lookup absent from this trace')
-        elif signal_type == 'MISSING_EDGE':
-            st.caption('Gray dashed: expected policy lookup not observed in this trace')
+        elif signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+            st.caption('Orange: new unapproved model · Gray dashed: two expected tool steps missing from the trace')
         else:
             st.caption('Orange: approved claim-retrieval connection flagged for unusual interaction rate')
         st.subheader('Event Evidence Trail')
@@ -447,12 +453,14 @@ else:
             st.write(detail['selected_event']['declared_purpose'])
             st.error('Policy rejection · ' + str(detail['backend_processing']['tier1_evidence']['policy_id']))
             st.caption('The backend reported a rejected interaction. A completed payout or transfer is not confirmed.')
-        elif signal_type == 'MISSING_EDGE':
-            st.markdown('**Expected behavior**')
-            st.write('Approved policy-status lookup should appear in the selected trace.')
-            st.markdown('**Observed trace result**')
-            st.warning('Expected connection not observed · MISSING_EDGE')
-            st.caption('The reason for the missing relationship has not been established.')
+        elif signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+            st.markdown('**Observed new model connection**')
+            st.write(nice_entity(event['source_entity_id']) + ' → ' + nice_entity(event['target_entity_id']))
+            st.warning('NEW_EDGE · Model not in the approved v3 topology')
+            st.markdown('**Two expected tool connections were not observed**')
+            for missing in detail['associated_missing_edge_events']:
+                st.write('Not observed: ' + nice_entity(missing['target_entity_id']))
+            st.caption('All three events share one trace ID. Tier 2 triggered but was not executed by design.')
         else:
             v = scenario['evidence']['interaction_velocity']
             c1, c2, c3 = st.columns(3)
@@ -469,16 +477,21 @@ else:
         st.markdown('**Agent:** ' + nice_entity(event['source_entity_id']))
         st.markdown('**Target:** ' + nice_entity(event['target_entity_id']))
         st.markdown('**Detected signal:** ' + event['signal_type'])
-        tier1 = detail.get('backend_processing', {}).get('tier1_evidence', {})
+        tier1 = (detail.get('backend_processing', {}).get('NEW_EDGE', {}).get('tier1_evidence', {})
+                 if signal_type == 'GRAPH_BOUNDARY_ANOMALY'
+                 else detail.get('backend_processing', {}).get('tier1_evidence', {}))
         processing = detail.get('backend_processing', {})
-        tier2_status = processing.get('tier2_execution_status', processing.get('status', 'Not supplied'))
+        tier2_status = (processing['NEW_EDGE'].get('tier2_result_status', processing['NEW_EDGE'].get('status', 'Not supplied'))
+                        if signal_type == 'GRAPH_BOUNDARY_ANOMALY'
+                        else processing.get('tier2_execution_status', processing.get('status', 'Not supplied')))
         st.markdown('**Tier 1 flagged:** ' + ('Yes' if tier1.get('tier1_flagged') else 'No'))
         st.markdown('**Tier 2 status:** ' + str(tier2_status).replace('_', ' ').title())
         if signal_type == 'REJECTED_INTERACTION':
             st.markdown('**Policy finding:** REJECTED / BL-1')
             st.caption('Direct incident scope: 1 agent / 1 target. This is not the NEW_EDGE Blast Radius KRI.')
-        elif signal_type == 'MISSING_EDGE':
-            st.caption('The expected lookup connection is missing from the selected trace.')
+        elif signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+            st.markdown('**Graph evidence:** 1 new model edge / 2 expected tool edges missing')
+            st.caption('Tier 2 was triggered for each of the three signals, but not executed by design.')
         else:
             st.caption('Velocity event generated under a controlled temporary topology.')
         st.caption('No automatic containment action is asserted.')
@@ -504,7 +517,7 @@ with st.expander('Data provenance'):
     st.write('Handoff:', data['handoff_revision'])
     st.write('Current topology:', data['current_environment']['current_topology_version'])
     st.write('Current model mode:', data['current_environment']['current_model_mode'])
-    st.caption('The controlled velocity event used temporary v3 topology; it is not the current baseline.')
+    st.caption('The controlled velocity test used a temporary topology; it is not the current v3 Qwen baseline.')
 # Do not display the full handoff in participant mode: it includes evaluator-only
 # recommended decisions. Keep the validated source JSON in the app directory.
 
