@@ -219,18 +219,72 @@ def graph_mermaid(scenario_key, focus_event=True):
 
 
 def render_mermaid(key, focus_event=True):
+    """Render Mermaid explicitly; show the same edges if its CDN is unavailable."""
     code = graph_mermaid(key, focus_event=focus_event)
-    embed = (
-        '<div class="mermaid">'+html_lib.escape(code)+'</div>'
-        '<script type="module">'
-        'import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";'
-        'mermaid.initialize({startOnLoad:true,theme:"dark",'
-        'themeVariables:{background:"#07090e",primaryColor:"#10141c",'
-        'primaryTextColor:"#eeeeee",lineColor:"#ff951f"}});'
-        '</script>'
-    )
+    mode = scenarios[key]['graph_rendering']['anomaly_type']
+    edges = data['level_1']['graph']['edges']
+    if focus_event:
+        selected_agent = scenarios[key]['agent']
+        selected_target = scenarios[key]['evidence']['target']
+        edges = [e for e in edges if e['source'] == selected_agent and
+                 (mode == 'REJECTED_INTERACTION' or e['target'] == selected_target)]
+    fallback_rows = []
+    for e in edges:
+        if e['approved'] is False and e.get('review_status') == 'POLICY_REJECTED':
+            state = 'REJECTED / BL-1' if mode == 'REJECTED_INTERACTION' else 'OTHER REJECTED EVENT'
+            accent = '#ff951f' if mode == 'REJECTED_INTERACTION' else '#637082'
+        elif e.get('missing_in_selected_trace') and mode in ('REJECTED_INTERACTION', 'MISSING_EDGE'):
+            state, accent = 'MISSING / EXPECTED', '#b1b4bd'
+        elif mode == 'VELOCITY_ANOMALY' and e.get('velocity_anomaly_event_id') == scenarios[key]['incident']:
+            state, accent = 'VELOCITY ANOMALY', '#ff951f'
+        else:
+            state, accent = e['relationship'], '#65a78b'
+        source = html_lib.escape(nice_entity(e['source']))
+        target = html_lib.escape(nice_entity(e['target']))
+        fallback_rows.append(
+            f'<div class="edge-row" style="--accent:{accent}">'
+            f'<span class="node">{source}</span>'
+            f'<span class="edge-label">⟶<small>{html_lib.escape(state)}</small></span>'
+            f'<span class="node">{target}</span></div>'
+        )
+    fallback = ''.join(fallback_rows) or '<p>No graph relationships provided.</p>'
+    js_code = json.dumps(code).replace('</', '<\\/')
+    embed = f'''<style>
+      body{{background:#07090e;color:#f1f1ef;font:14px system-ui,sans-serif;margin:6px}}
+      #fallback{{display:grid;gap:12px;max-height:425px;overflow:auto;padding:3px}}
+      .edge-row{{display:flex;align-items:center;gap:8px;min-width:0}}
+      .node{{background:#10141c;border:1px solid #677080;border-radius:6px;padding:10px 8px;
+             flex:1;min-width:0;overflow-wrap:anywhere;text-align:center;font-size:14px}}
+      .edge-label{{display:flex;flex-direction:column;align-items:center;gap:4px;
+                   flex:0 0 128px;color:var(--accent);font-size:22px;font-weight:700}}
+      .edge-label small{{font-size:11px;line-height:1.3;text-align:center}}
+      #mermaid-target{{display:none}}
+      #mermaid-target svg{{max-width:100%;height:auto}}
+      @media(max-width:650px){{.edge-label{{flex-basis:92px}}.node{{font-size:12px}}}}
+    </style>
+    <div id="fallback" aria-label="Interaction relationship graph">{fallback}</div>
+    <div id="mermaid-target" class="mermaid"></div>
+    <script type="module">
+      const source = {js_code};
+      try {{
+        const m = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        const mermaid = m.default;
+        mermaid.initialize({{startOnLoad:false,theme:'dark',securityLevel:'strict',
+          themeVariables:{{background:'#07090e',primaryColor:'#10141c',
+                           primaryTextColor:'#eeeeee',lineColor:'#ff951f'}}}});
+        const node = document.getElementById('mermaid-target');
+        node.textContent = source;
+        node.style.display = 'block';
+        await mermaid.run({{nodes:[node]}});
+        if (!node.querySelector('svg')) throw new Error('Mermaid did not create SVG');
+        document.getElementById('fallback').style.display = 'none';
+      }} catch (error) {{
+        document.getElementById('mermaid-target').style.display = 'none';
+        document.getElementById('fallback').style.display = 'grid';
+        console.warn('Mermaid unavailable; showing validated relationship fallback.', error);
+      }}
+    </script>'''
     components.html(embed, height=450, scrolling=True)
-
 
 if 'selected_scenario' not in st.session_state or st.session_state.selected_scenario not in scenarios:
     st.session_state.selected_scenario = data['display_contract']['default_selected_scenario_key']
