@@ -127,6 +127,15 @@ SCENARIO_GUIDE = {
 }
 
 
+def display_kri_value(name, value):
+    """Normalize unavailable KRI wording without changing ML handoff evidence."""
+    if name == 'TOKEN VELOCITY' and isinstance(value, str) and value.strip().lower() in (
+        'not measured', 'not measured for this event', 'not measured for this scenario'
+    ):
+        return 'Not measured'
+    return value
+
+
 def kri_explanation(signal_type, name):
     """Short context next to the card; authoritative values remain ML-provided."""
     if name == 'BLAST RADIUS':
@@ -142,7 +151,7 @@ def kri_explanation(signal_type, name):
     if signal_type == 'REJECTED_INTERACTION':
         return 'Validated Nov. 17 workflow snapshot, not a current rolling measurement.'
     if signal_type == 'VELOCITY_ANOMALY':
-        return 'Not measured for this event; DE2 interaction rate is a separate metric.'
+        return 'No verified workflow-token measurement was recorded for this event.'
     return 'No verified workflow-token measurement was captured for this trace.'
 
 
@@ -445,7 +454,7 @@ if st.session_state.view_level == 1:
     values = [
         ('BLAST RADIUS', risk['blast']),
         ('BOUNDARY DRIFT', risk['drift']),
-        ('TOKEN VELOCITY', risk['tokens']),
+        ('TOKEN VELOCITY', display_kri_value('TOKEN VELOCITY', risk['tokens'])),
     ]
     for col, (name, value) in zip(st.columns(3, gap='medium'), values):
         with col:
@@ -487,7 +496,7 @@ if st.session_state.view_level == 1:
             elif signal_type == 'VELOCITY_ANOMALY':
                 iv = scenario['evidence']['interaction_velocity']
                 st.write('DE2 interaction rate:', f"{iv['current_rate']} vs {iv['baseline_rate']:.2f} baseline")
-                st.caption('Interaction velocity is NOT token velocity.')
+                
 
     with st.expander('Backend evidence · Optional technical detail'):
         st.caption('The full backend details refer only to the selected validated event.')
@@ -511,7 +520,7 @@ else:
     for col, (name, value) in zip(st.columns(3), [
         ('BLAST RADIUS', risk['blast']),
         ('BOUNDARY DRIFT', risk['drift']),
-        ('TOKEN VELOCITY', risk['tokens']),
+        ('TOKEN VELOCITY', display_kri_value('TOKEN VELOCITY', risk['tokens'])),
     ]):
         with col:
             st.metric(name, value, help=KRI_HELP[name])
@@ -565,7 +574,7 @@ else:
             st.write(f"Recorded: {v['current_rate']:g} interactions · Baseline: {v['baseline_rate']:.2f} · Threshold: {v['threshold']:g} · Window: {v['window_minutes']:g} minutes")
             st.markdown('**3. Backend processing recorded**')
             st.write('Tier 1 flagged the velocity anomaly and identified a topology-version mismatch.')
-            st.caption('Interaction rate is not Token Velocity in tokens/min. The different topology is documented controlled-test provenance.')
+            st.caption('The topology-version mismatch reflects the documented controlled test.')
         st.caption('Source: validated ML handoff; no events, metrics, or outcomes were inferred.')
     with b:
         st.subheader('Investigation Findings')
