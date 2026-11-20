@@ -234,6 +234,71 @@ def edge_display(edge, scenario_key):
     return 'APPROVED BASELINE', 'green'
 
 
+
+def graph_node_label(value):
+    """Concise display names only; source identifiers in the ML handoff stay intact."""
+    if value.startswith('agent-'):
+        slug = value.removeprefix('agent-')
+        if slug.startswith('cs-'):
+            return 'Customer service agent'
+        if slug.startswith('claims-'):
+            return 'Claims agent'
+        if slug.startswith('orch-'):
+            return 'Orchestrator agent'
+        if slug.startswith('underwriting-'):
+            return 'Underwriting agent'
+        return 'Agent ' + slug[:15]
+    if value.startswith('tool:'):
+        action = value.rsplit(':', 1)[-1].replace('_', ' ')
+        names = {
+            'fetch claim': 'Fetch claim',
+            'verify policy coverage': 'Verify coverage',
+            'approve payout': 'Approve payout',
+            'lookup policy status': 'Policy lookup',
+            'pull credit report': 'Credit report',
+        }
+        return names.get(action, action[:26].title())
+    if value.startswith('model:'):
+        model = value.rsplit(':', 1)[-1]
+        if 'qwen2.5' in model:
+            return 'Qwen 2.5 (3B)'
+        if 'gemini-3.5-flash' in model:
+            return 'Gemini 3.5 Flash'
+        return model[:26]
+    return nice_entity(value)
+
+
+def graph_edge_label(status, full_label):
+    """Compact graph-only legend codes; detailed state stays unchanged elsewhere."""
+    if status == 'grey':
+        if 'MISSING /' in full_label:
+            return 'MISSING'
+        return 'BASELINE ONLY'
+    if status == 'orange':
+        if 'REJECTED' in full_label:
+            return 'REJECTED / BL-1'
+        if 'UNAPPROVED' in full_label:
+            return 'NEW / UNAPPROVED'
+        return 'RATE ANOMALY'
+    if status == 'muted':
+        return 'OTHER EVENT'
+    return 'APPROVED'
+
+
+def graph_state_legend(scenario_key):
+    mode = scenarios[scenario_key]['graph_rendering']['anomaly_type']
+    if mode == 'GRAPH_BOUNDARY_ANOMALY':
+        return ('MISSING (gray dashed): expected approved tool connection not observed in this trace. '
+                'BASELINE ONLY (gray dashed): historically approved model connection, not observed here. '
+                'NEW / UNAPPROVED (orange): model connection observed outside the approved topology.')
+    if mode == 'REJECTED_INTERACTION':
+        return ('REJECTED / BL-1 (orange): payout interaction rejected by policy. '
+                'BASELINE ONLY (gray dashed): approved relationship not observed in this trace. '
+                'APPROVED (green): validated approved connection.')
+    return ('RATE ANOMALY (orange): an approved tool connection had an unusual interaction rate. '
+            'APPROVED (green): approved baseline connection. '
+            'OTHER EVENT (muted): separate validated evidence.')
+
 def graph_mermaid(scenario_key, focus_event=True):
     """Mermaid directed graph with scenario-scoped evidence styling."""
     edges = graph_edges_for_view(scenario_key, focus_event)
@@ -242,12 +307,12 @@ def graph_mermaid(scenario_key, focus_event=True):
     node_ids = {name: f'N{i}' for i, name in enumerate(entities)}
     lines = ['flowchart LR']
     for name, nid in node_ids.items():
-        label = nice_entity(name).replace('"', "'").replace('\n', ' ')
+        label = graph_node_label(name).replace('"', "'").replace('\n', ' ')
         lines.append(f'{nid}["{label}"]')
     styles = {'green': [], 'orange': [], 'grey': [], 'muted': []}
     for idx, edge in enumerate(edges):
         label, status = edge_display(edge, scenario_key)
-        label = label.replace('"', "'")
+        label = graph_edge_label(status, label).replace('"', "'")
         lines.append(f'{node_ids[edge["source"]]} -->|"{label}"| {node_ids[edge["target"]]}')
         styles[status].append(idx)
     for kind, css in (
@@ -291,7 +356,9 @@ def render_mermaid(key, focus_event=True):
                    flex:0 0 128px;color:var(--accent);font-size:22px;font-weight:700}}
       .edge-label small{{font-size:11px;line-height:1.3;text-align:center}}
       #mermaid-target{{display:none}}
-      #mermaid-target svg{{max-width:100%;height:auto}}
+      #mermaid-target svg{{display:block;width:100%!important;max-width:100%!important;height:auto!important;min-width:0}}
+      #mermaid-target .nodeLabel{{font-size:14px!important}}
+      #mermaid-target .edgeLabel{{font-size:11px!important}}
       @media(max-width:650px){{.edge-label{{flex-basis:92px}}.node{{font-size:12px}}}}
     </style>
     <div id="fallback" aria-label="Interaction relationship graph">{fallback}</div>
@@ -302,6 +369,7 @@ def render_mermaid(key, focus_event=True):
         const m = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
         const mermaid = m.default;
         mermaid.initialize({{startOnLoad:false,theme:'dark',securityLevel:'strict',
+          flowchart:{{htmlLabels:false,nodeSpacing:32,rankSpacing:70,useMaxWidth:true}},
           themeVariables:{{background:'#07090e',primaryColor:'#10141c',
                            primaryTextColor:'#eeeeee',lineColor:'#ff951f'}}}});
         const node = document.getElementById('mermaid-target');
@@ -398,7 +466,7 @@ if st.session_state.view_level == 1:
         st.caption('Current approved baseline and validated flagged activity; not a complete trace of this event.')
         # Level 1: full graph always visible. Avoid rendering Mermaid inside a collapsed expander.
         render_mermaid(key, focus_event=False)
-        st.caption('Green: approved baseline · Orange: selected flagged connection · Gray dashed: expected but missing in the selected trace · Muted: another event')
+        st.caption(graph_state_legend(key))
         st.button('Investigate this event →', type='primary', width='stretch',
                   on_click=lambda: st.session_state.update(view_level=2))
     with right:
@@ -458,12 +526,12 @@ else:
         # This is intentionally different from Level 1's full approved topology.
         st.subheader('Selected Event Connection')
         render_mermaid(key, focus_event=True)
-        if signal_type == 'REJECTED_INTERACTION':
-            st.caption('Orange: rejected payout action · Gray dashed: approved lookup absent from this trace')
-        elif signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-            st.caption('Orange: new unapproved model · Gray dashed: two expected tool steps missing from the trace')
-        else:
-            st.caption('Orange: approved claim-retrieval connection flagged for unusual interaction rate')
+        st.caption(graph_state_legend(key))
+        with st.expander('Full connection names and evidence labels'):
+            for relationship in graph_edges_for_view(key, focus_event=True):
+                full_state, _ = edge_display(relationship, key)
+                st.write(nice_entity(relationship['source']) + ' → '
+                         + nice_entity(relationship['target']) + ' — ' + full_state)
         st.subheader('Event Evidence Trail')
         st.caption('Validated observations and backend processing. The steps below describe evidence stages, not an inferred sequence of agent actions.')
         if signal_type == 'REJECTED_INTERACTION':
