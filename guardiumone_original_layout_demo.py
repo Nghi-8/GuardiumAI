@@ -146,6 +146,34 @@ def kri_explanation(signal_type, name):
     return 'No verified workflow-token measurement was captured for this trace.'
 
 
+
+def boundary_drift_scope_note(signal_type):
+    """Explain the expanded ML scenario measure without rewriting KRI_HELP."""
+    if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+        return ('ML scenario detail: Boundary Drift reports 1 new, unapproved model '
+                'connection and 2 expected tool connections missing from the same trace. '
+                'The original tooltip defines the distinct NEW_EDGE component only.')
+    return None
+
+
+def readable_status(value):
+    """Readable backend states; original machine values remain in Technical Evidence."""
+    if value is None:
+        return 'Not supplied'
+    states = {
+        'COMPLETED': 'Completed',
+        'ASSESSED': 'Assessed',
+        'NOT_ASSESSED': 'Not assessed',
+        'NOT_MEASURED': 'Not measured',
+        'NOT_EXECUTED_BY_DESIGN': 'Not executed by design',
+        'AWAITING_EXPLICIT_EXECUTION': 'Triggered — not executed by design',
+        'VERSION_MISMATCH': 'Version mismatch — controlled test',
+        'VERSION_MISMATCH_EXPECTED_AFTER_CONTROLLED_TEST_RESTORE': 'Version mismatch — controlled test',
+        'READY': 'Ready',
+    }
+    return states.get(str(value), str(value).replace('_', ' ').capitalize())
+
+
 def evidence_summary(scenario, detail):
     """Exclude evaluator-only guidance from participant-facing evidence JSON."""
     ev = scenario['evidence']
@@ -301,7 +329,7 @@ with st.sidebar:
     st.markdown('---')
     chosen = st.selectbox('Scenario', scenario_keys,
                           index=scenario_keys.index(st.session_state.selected_scenario),
-                          format_func=lambda k: SCENARIO_GUIDE[scenarios[k]['graph_rendering']['anomaly_type']]['short_name'])
+                          format_func=lambda k: k.split(' · ', 1)[0] + ' · ' + SCENARIO_GUIDE[scenarios[k]['graph_rendering']['anomaly_type']]['short_name'])
     if chosen != st.session_state.selected_scenario:
         st.session_state.selected_scenario = chosen
         st.session_state.view_level = 1
@@ -311,6 +339,7 @@ with st.sidebar:
             st.session_state.view_level = 1
             st.rerun()
     st.info('Validated live sandbox evidence · Not a production incident.')
+    st.caption('Selected ML scenario: ' + st.session_state.selected_scenario)
     st.caption('Choose a scenario, review Level 1, then investigate its evidence in Level 2.')
     st.caption('Approved topology: ' + data['current_environment']['current_topology_version'])
     st.caption('Measurement counts describe the selected validated evidence package, not the full telemetry stream.')
@@ -357,6 +386,9 @@ if st.session_state.view_level == 1:
     with st.expander('What do these measurements mean?'):
         for name, _ in values:
             st.markdown('**' + name.title() + ':** ' + kri_explanation(signal_type, name))
+        scope_note = boundary_drift_scope_note(signal_type)
+        if scope_note:
+            st.info(scope_note)
         st.caption('Hover over each KRI label for its original calculation definition.')
 
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
@@ -402,18 +434,9 @@ else:
     st.subheader(scenario['headline'])
     event = detail['primary_event'] if signal_type == 'GRAPH_BOUNDARY_ANOMALY' else detail['selected_event']
     st.markdown('<span class="pill">EVENT-LEVEL EVIDENCE</span>', unsafe_allow_html=True)
-    # Executive summary comes before the technical identifiers.
-    st.subheader('What happened?')
-    st.write(guide['what'])
-    st.subheader('Why was it flagged?')
-    st.write(guide['why'])
-    st.subheader('What is still unknown?')
-    st.write(guide['unknown'])
-    if signal_type == 'REJECTED_INTERACTION':
-        st.caption('ML Tier 2: MEDIUM composite risk; intent UNCERTAIN. '
-                   'The runtime ALLOW context does not override the DE2 BL-1 rejection.')
-    elif signal_type == 'VELOCITY_ANOMALY':
-        st.caption('The temporary velocity-test topology differs from the current approved v3 Qwen sandbox.')
+    # Level 1 already explains what happened, why it matters, and what is unknown.
+    # Keep Level 2 focused on detailed connections, observations, and ML findings.
+    st.caption('Investigate the selected connection, review validated observations, and inspect the backend findings.')
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
     st.subheader('Three Executive KRIs · Selected Event')
     risk = scenario['risk_data']
@@ -424,7 +447,9 @@ else:
     ]):
         with col:
             st.metric(name, value, help=KRI_HELP[name])
-            st.caption(kri_explanation(signal_type, name))
+    scope_note = boundary_drift_scope_note(signal_type)
+    if scope_note:
+        st.caption(scope_note)
 
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
     a, b = st.columns([1.45, 1])
@@ -490,9 +515,9 @@ else:
                 st.write('Graph anomaly: ' + ('Detected' if t1.get('graph_anomaly') is True else 'Not flagged' if t1.get('graph_anomaly') is False else 'Not supplied'))
                 if t1.get('policy_violation') is True:
                     st.write('Policy finding: Flagged · ' + str(t1.get('policy_id') or 'Policy ID unavailable'))
-                st.caption('Tier 2: ' + str(stage.get('tier2_result_status', 'Not supplied')).replace('_', ' ').lower())
-            st.markdown('**Topology assessment:** ' + str(processing.get('NEW_EDGE', {}).get('tier1_evidence', {}).get('topology_assessment_status', 'Not supplied')).replace('_', ' ').title())
-            st.markdown('**Downstream impact:** Not assessed')
+                st.caption('Tier 2: Triggered — ' + readable_status(stage.get('tier2_result_status')))
+            st.markdown('**Topology assessment:** ' + readable_status(processing.get('NEW_EDGE', {}).get('tier1_evidence', {}).get('topology_assessment_status')))
+            st.markdown('**Downstream impact:** ' + readable_status(detail.get('blast_radius', {}).get('downstream_impact_status')))
         else:
             t1 = processing.get('tier1_evidence', {})
             st.markdown('**Tier 1 assessment**')
@@ -500,9 +525,9 @@ else:
             st.write('Graph anomaly: ' + ('Detected' if t1.get('graph_anomaly') is True else 'Not flagged' if t1.get('graph_anomaly') is False else 'Not supplied'))
             st.write('Policy violation: ' + ('Flagged' if t1.get('policy_violation') is True else 'Not flagged' if t1.get('policy_violation') is False else 'Not supplied'))
             st.write('Velocity anomaly: ' + ('Detected' if t1.get('velocity_anomaly') is True else 'Not flagged' if t1.get('velocity_anomaly') is False else 'Not supplied'))
-            st.write('Topology assessment: ' + str(t1.get('topology_assessment_status', 'Not supplied')).replace('_', ' ').title())
+            st.write('Topology assessment: ' + readable_status(t1.get('topology_assessment_status')))
             st.markdown('**Tier 2 assessment**')
-            st.write('Execution: ' + str(processing.get('tier2_execution_status', processing.get('tier2_result_status', 'Not supplied'))).replace('_', ' ').title())
+            st.write('Execution: ' + readable_status(processing.get('tier2_execution_status', processing.get('tier2_result_status'))))
             if signal_type == 'REJECTED_INTERACTION':
                 tier2 = processing.get('tier2_handoff', {}).get('tier2_result', {})
                 intent = processing.get('tier2_handoff', {}).get('intent_drift_result', {})
@@ -510,7 +535,7 @@ else:
                 st.write('Intent classification: ' + str(intent.get('classification', 'Not supplied')))
                 st.markdown('**Unconfirmed:** Downstream payout outcome')
             else:
-                st.markdown('**Unresolved:** Tier 2 was not executed by design')
+                st.markdown('**Unresolved:** ' + readable_status(processing.get('tier2_result_status')))
                 st.caption('Version mismatch reflects the controlled velocity-test topology.')
         st.caption('No automatic containment action is asserted by the ML handoff.')
 
