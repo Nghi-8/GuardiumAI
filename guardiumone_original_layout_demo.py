@@ -106,22 +106,16 @@ SCENARIO_GUIDE = {
     'REJECTED_INTERACTION': {
         'short_name': 'Rejected payout action',
         'what': 'A customer-service AI agent attempted to use a payout approval tool, outside its assigned role of answering policy questions.',
-        'why': 'Rule BL-1 prohibits customer-service agents from approving or sending payouts. DE2 flagged this interaction as rejected.',
-        'unknown': 'The downstream financial outcome was not independently confirmed. Tier 2 reported MEDIUM risk but UNCERTAIN intent.',
         'focus': 'A policy-rejected connection is not the same as a NEW_EDGE signal.',
     },
     'GRAPH_BOUNDARY_ANOMALY': {
         'short_name': 'Graph boundary anomaly',
         'what': 'A claims-processing agent used an unapproved AI model, while two expected claim-processing tool connections were absent from the same trace.',
-        'why': 'DE2 detected one NEW_EDGE to an unapproved model and two MISSING_EDGE signals for fetch claim and verify coverage. Tier 1 flagged the new connection as a graph and policy anomaly.',
-        'unknown': 'The downstream effect has not been assessed. Tier 2 was triggered for all three findings but model execution was not run.',
         'focus': 'This trace contains one newly observed model connection and two missing expected tool connections.',
     },
     'VELOCITY_ANOMALY': {
         'short_name': 'Unusual claims-tool activity',
         'what': 'A claims agent used an approved claim-retrieval connection at a higher interaction rate than its recorded baseline.',
-        'why': 'DE2 flagged 20 interactions versus a baseline of about 2.39 in its five-minute monitoring window.',
-        'unknown': 'The event came from a controlled temporary velocity-test topology. Its version differs from the restored current v3 Qwen topology, and Tier 2 was not executed.',
         'focus': 'This is DE2 interaction activity, not the Token Velocity KRI measured in tokens/min.',
     },
 }
@@ -479,23 +473,28 @@ if st.session_state.view_level == 1:
         st.button('Investigate this event →', type='primary', width='stretch',
                   on_click=lambda: st.session_state.update(view_level=2))
     with right:
-        st.subheader('Why it matters')
-        st.markdown('<div class="focus-note">' + html_lib.escape(guide['why']) + '</div>',
-                    unsafe_allow_html=True)
-        st.markdown('**What remains unknown**')
-        st.write(guide['unknown'])
-        with st.expander('Evidence signals and identifiers'):
-            st.write('Agent:', nice_entity(scenario['agent']))
-            st.write('Target:', nice_entity(scenario['evidence']['target']))
-            st.write('Signal:', scenario['evidence']['event_type'])
+        # Facts are read from the selected validated scenario, not hand-authored
+        # interpretations that need maintenance whenever the ML handoff changes.
+        st.subheader('Selected Event Details')
+        evidence = scenario['evidence']
+        st.write('Agent:', nice_entity(evidence.get('agent', scenario['agent'])))
+        st.write('Connection target:', nice_entity(evidence['target']))
+        st.write('Event:', signal_type.replace('_', ' ').title())
+        if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+            drift = evidence.get('boundary_drift', {})
+            st.write('New connections:', drift.get('new_edge_signals', 'Not supplied'))
+            st.write('Expected connections missing:', drift.get('missing_edge_signals', 'Not supplied'))
+        elif signal_type == 'VELOCITY_ANOMALY':
+            activity = evidence.get('interaction_velocity', {})
+            st.write('Recorded interactions:', activity.get('current_rate', 'Not supplied'))
+            st.write('Typical level:', round(activity['baseline_rate'], 2) if activity.get('baseline_rate') is not None else 'Not supplied')
+        elif signal_type == 'REJECTED_INTERACTION':
+            st.write('Policy finding:', evidence.get('policy_status', 'Not supplied').title())
+        with st.expander('Evidence identifiers'):
             st.write('Event ID:', incident)
-            if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-                st.write('Graph findings:', '1 NEW_EDGE and 2 MISSING_EDGE signals in the same trace')
-            if signal_type == 'REJECTED_INTERACTION':
-                st.write('Direct incident scope:', '1 agent / 1 target (different from NEW_EDGE Blast Radius)')
-            elif signal_type == 'VELOCITY_ANOMALY':
-                iv = scenario['evidence']['interaction_velocity']
-                st.write('DE2 interaction rate:', f"{iv['current_rate']} vs {iv['baseline_rate']:.2f} baseline")
+            st.write('Evidence type:', evidence.get('event_type', 'Not supplied'))
+            if evidence.get('trace_id'):
+                st.write('Trace ID:', evidence['trace_id'])
                 
 
     with st.expander('Backend evidence · Optional technical detail'):
@@ -511,7 +510,7 @@ else:
     st.subheader(scenario['headline'])
     event = detail['primary_event'] if signal_type == 'GRAPH_BOUNDARY_ANOMALY' else detail['selected_event']
     st.markdown('<span class="pill">EVENT-LEVEL EVIDENCE</span>', unsafe_allow_html=True)
-    # Level 1 already explains what happened, why it matters, and what is unknown.
+    # Level 1 presents the incident headline and validated evidence.
     # Keep Level 2 focused on detailed connections, observations, and ML findings.
     st.caption('Investigate the selected connection, review validated observations, and inspect the backend findings.')
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
