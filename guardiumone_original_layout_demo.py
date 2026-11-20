@@ -35,7 +35,7 @@ h1,h2,h3{letter-spacing:-.025em}
 </style>''', unsafe_allow_html=True)
 
 try:
-    with (ROOT / 'nghi_dashboard_handoff_1118-v2.json').open(encoding='utf-8-sig') as handle:
+    with (ROOT / 'nghi_dashboard_handoff_1118.json').open(encoding='utf-8-sig') as handle:
         data = json.load(handle)
 except (OSError, ValueError) as exc:
     st.error('Cannot read the validated ML handoff. Place nghi_dashboard_handoff_1118.json beside this Python script.')
@@ -440,61 +440,79 @@ else:
         else:
             st.caption('Orange: approved claim-retrieval connection flagged for unusual interaction rate')
         st.subheader('Event Evidence Trail')
-        st.markdown('**Source agent**')
-        st.write(nice_entity(event['source_entity_id']))
-        st.markdown('**Relationship / target**')
-        st.write(event['relationship_type'] + ' → ' + nice_entity(event['target_entity_id']))
+        st.caption('Validated observations and backend processing. The steps below describe evidence stages, not an inferred sequence of agent actions.')
         if signal_type == 'REJECTED_INTERACTION':
             context = detail['backend_processing']['runtime_context']
             observed = context['observed_action']
-            st.markdown('**Observed tool action**')
-            st.write(observed['operation'] + ' · ' + observed['tool'].replace('_', ' '))
-            st.markdown('**Declared responsibility**')
-            st.write(detail['selected_event']['declared_purpose'])
-            st.error('Policy rejection · ' + str(detail['backend_processing']['tier1_evidence']['policy_id']))
-            st.caption('The backend reported a rejected interaction. A completed payout or transfer is not confirmed.')
+            st.markdown('**1. Tool action recorded**')
+            st.write('Customer-service agent → ' + nice_entity(event['target_entity_id']))
+            st.write('Action: ' + observed['operation'].replace('_', ' ') + ' · ' + str(observed.get('tool', 'Not supplied')).replace('_', ' '))
+            st.markdown('**2. Policy rejection issued**')
+            st.write('DE2 emitted REJECTED_INTERACTION under rule ' + str(detail['backend_processing']['tier1_evidence']['policy_id']) + '.')
+            st.markdown('**3. Backend processing recorded**')
+            st.write('Tier 1 flagged the policy violation; Tier 2 analysis completed.')
+            st.caption('The observed action is not confirmation that a payout was completed.')
         elif signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-            st.markdown('**Observed new model connection**')
+            st.markdown('**1. New model relationship observed**')
             st.write(nice_entity(event['source_entity_id']) + ' → ' + nice_entity(event['target_entity_id']))
-            st.warning('NEW_EDGE · Model not in the approved v3 topology')
-            st.markdown('**Two expected tool connections were not observed**')
-            for missing in detail['associated_missing_edge_events']:
-                st.write('Not observed: ' + nice_entity(missing['target_entity_id']))
-            st.caption('All three events share one trace ID. Tier 2 triggered but was not executed by design.')
+            st.caption('NEW_EDGE · observed relationship not in the approved current-v3 topology')
+            missing = detail['associated_missing_edge_events']
+            for idx, item in enumerate(missing, start=2):
+                st.markdown(f'**{idx}. Expected tool relationship not observed**')
+                st.write(nice_entity(item['source_entity_id']) + ' → ' + nice_entity(item['target_entity_id']))
+                st.caption('MISSING_EDGE · expected connection absent from the selected trace')
+            st.markdown('**4. Backend processing recorded**')
+            st.write('Tier 1 flagged all three signals; all triggered Tier 2 preparation.')
+            st.caption('All three findings belong to the same validated trace. This display order is not an execution timeline.')
         else:
             v = scenario['evidence']['interaction_velocity']
-            c1, c2, c3 = st.columns(3)
-            c1.metric('RECORDED RATE', f"{v['current_rate']:g}")
-            c2.metric('BASELINE', f"{v['baseline_rate']:.2f}")
-            c3.metric('THRESHOLD', f"{v['threshold']:g}")
-            st.warning(f"Interaction-rate anomaly · {v['window_minutes']:g}-minute monitoring window")
-            st.caption('This is DE2 interaction activity, not LLM Token Velocity.')
-            st.caption('Event topology: ' + scenario['evidence']['event_topology_version'])
-            st.caption('Current topology: ' + scenario['evidence']['current_topology_version'])
-        st.caption('Event-specific evidence from the validated ML handoff; no new connections or metrics were inferred.')
+            st.markdown('**1. Approved tool relationship observed**')
+            st.write(nice_entity(event['source_entity_id']) + ' → ' + nice_entity(event['target_entity_id']))
+            st.markdown('**2. Interaction-rate anomaly emitted**')
+            st.write(f"Recorded: {v['current_rate']:g} interactions · Baseline: {v['baseline_rate']:.2f} · Threshold: {v['threshold']:g} · Window: {v['window_minutes']:g} minutes")
+            st.markdown('**3. Backend processing recorded**')
+            st.write('Tier 1 flagged the velocity anomaly and identified a topology-version mismatch.')
+            st.caption('Interaction rate is not Token Velocity in tokens/min. The different topology is documented controlled-test provenance.')
+        st.caption('Source: validated ML handoff; no events, metrics, or outcomes were inferred.')
     with b:
-        st.subheader('Evidence Signals')
-        st.markdown('**Agent:** ' + nice_entity(event['source_entity_id']))
-        st.markdown('**Target:** ' + nice_entity(event['target_entity_id']))
-        st.markdown('**Detected signal:** ' + event['signal_type'])
-        tier1 = (detail.get('backend_processing', {}).get('NEW_EDGE', {}).get('tier1_evidence', {})
-                 if signal_type == 'GRAPH_BOUNDARY_ANOMALY'
-                 else detail.get('backend_processing', {}).get('tier1_evidence', {}))
+        st.subheader('Investigation Findings')
+        st.caption('Backend determinations and unresolved questions—not a repeat of the event trace.')
         processing = detail.get('backend_processing', {})
-        tier2_status = (processing['NEW_EDGE'].get('tier2_result_status', processing['NEW_EDGE'].get('status', 'Not supplied'))
-                        if signal_type == 'GRAPH_BOUNDARY_ANOMALY'
-                        else processing.get('tier2_execution_status', processing.get('status', 'Not supplied')))
-        st.markdown('**Tier 1 flagged:** ' + ('Yes' if tier1.get('tier1_flagged') else 'No'))
-        st.markdown('**Tier 2 status:** ' + str(tier2_status).replace('_', ' ').title())
-        if signal_type == 'REJECTED_INTERACTION':
-            st.markdown('**Policy finding:** REJECTED / BL-1')
-            st.caption('Direct incident scope: 1 agent / 1 target. This is not the NEW_EDGE Blast Radius KRI.')
-        elif signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-            st.markdown('**Graph evidence:** 1 new model edge / 2 expected tool edges missing')
-            st.caption('Tier 2 was triggered for each of the three signals, but not executed by design.')
+        if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
+            stages = [
+                ('New model edge', processing.get('NEW_EDGE', {})),
+                ('Missing fetch_claim', processing.get('MISSING_FETCH', {})),
+                ('Missing verify_policy_coverage', processing.get('MISSING_VERIFY', {})),
+            ]
+            for label, stage in stages:
+                t1 = stage.get('tier1_evidence', {})
+                st.markdown('**' + label + '**')
+                st.write('Graph anomaly: ' + ('Detected' if t1.get('graph_anomaly') is True else 'Not flagged' if t1.get('graph_anomaly') is False else 'Not supplied'))
+                if t1.get('policy_violation') is True:
+                    st.write('Policy finding: Flagged · ' + str(t1.get('policy_id') or 'Policy ID unavailable'))
+                st.caption('Tier 2: ' + str(stage.get('tier2_result_status', 'Not supplied')).replace('_', ' ').lower())
+            st.markdown('**Topology assessment:** ' + str(processing.get('NEW_EDGE', {}).get('tier1_evidence', {}).get('topology_assessment_status', 'Not supplied')).replace('_', ' ').title())
+            st.markdown('**Downstream impact:** Not assessed')
         else:
-            st.caption('Velocity event generated under a controlled temporary topology.')
-        st.caption('No automatic containment action is asserted.')
+            t1 = processing.get('tier1_evidence', {})
+            st.markdown('**Tier 1 assessment**')
+            st.write('Flagged: ' + ('Yes' if t1.get('tier1_flagged') else 'No' if t1.get('tier1_flagged') is False else 'Not supplied'))
+            st.write('Graph anomaly: ' + ('Detected' if t1.get('graph_anomaly') is True else 'Not flagged' if t1.get('graph_anomaly') is False else 'Not supplied'))
+            st.write('Policy violation: ' + ('Flagged' if t1.get('policy_violation') is True else 'Not flagged' if t1.get('policy_violation') is False else 'Not supplied'))
+            st.write('Velocity anomaly: ' + ('Detected' if t1.get('velocity_anomaly') is True else 'Not flagged' if t1.get('velocity_anomaly') is False else 'Not supplied'))
+            st.write('Topology assessment: ' + str(t1.get('topology_assessment_status', 'Not supplied')).replace('_', ' ').title())
+            st.markdown('**Tier 2 assessment**')
+            st.write('Execution: ' + str(processing.get('tier2_execution_status', processing.get('tier2_result_status', 'Not supplied'))).replace('_', ' ').title())
+            if signal_type == 'REJECTED_INTERACTION':
+                tier2 = processing.get('tier2_handoff', {}).get('tier2_result', {})
+                intent = processing.get('tier2_handoff', {}).get('intent_drift_result', {})
+                st.write('Composite risk: ' + str(tier2.get('risk_level', 'Not supplied')))
+                st.write('Intent classification: ' + str(intent.get('classification', 'Not supplied')))
+                st.markdown('**Unconfirmed:** Downstream payout outcome')
+            else:
+                st.markdown('**Unresolved:** Tier 2 was not executed by design')
+                st.caption('Version mismatch reflects the controlled velocity-test topology.')
+        st.caption('No automatic containment action is asserted by the ML handoff.')
 
     st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
     st.subheader('Technical Evidence')
