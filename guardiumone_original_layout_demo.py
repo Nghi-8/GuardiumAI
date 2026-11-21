@@ -1,7 +1,7 @@
 """GuardiumOne | approved executive layout + validated November 18 ML scenarios.
 
 Run: streamlit run guardiumone_dashboard.py
-Data: nghi_dashboard_handoff_1118.json (same directory).
+Data: dashboard_handoff_1118.json (same directory).
 No direct DE2 reads, inference, or fabricated KRI measurements.
 """
 import html as html_lib
