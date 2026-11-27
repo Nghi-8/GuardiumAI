@@ -1432,7 +1432,12 @@
           "token_velocity": "Historical validated workflow snapshot; projected-exhaustion warning. The baseline was not ready, so the reading does not establish a usage spike."
         },
         "scenario_label": "Rejected payout action",
-        "recommendation_visibility": "PRODUCT_DEMONSTRATION"
+        "recommendation_visibility": "PRODUCT_DEMONSTRATION",
+        "kri_context_short": {
+          "blast_radius": "New-connection exposure only; a payout policy violation was still flagged.",
+          "boundary_drift": "No drift signal; the payout action was flagged separately under BL-1.",
+          "token_velocity": "Historical snapshot; exhaustion warning. No usage spike established."
+        }
       }
     },
     {
@@ -1769,7 +1774,12 @@
           "token_velocity": "No scenario-specific workflow token-usage measurement was recorded."
         },
         "scenario_label": "Unexpected model and missing connections",
-        "recommendation_visibility": "PRODUCT_DEMONSTRATION"
+        "recommendation_visibility": "PRODUCT_DEMONSTRATION",
+        "kri_context_short": {
+          "blast_radius": "Direct new-connection exposure; downstream impact not assessed.",
+          "boundary_drift": "Expected connections were not observed; skipped steps are not proven.",
+          "token_velocity": "No verified workflow token rate for this trace."
+        }
       }
     },
     {
@@ -2011,7 +2021,12 @@
           "token_velocity": "No verified workflow token rate was recorded. The interaction-rate finding is displayed separately."
         },
         "scenario_label": "Unusual claims activity",
-        "recommendation_visibility": "PRODUCT_DEMONSTRATION"
+        "recommendation_visibility": "PRODUCT_DEMONSTRATION",
+        "kri_context_short": {
+          "blast_radius": "No new-connection exposure; unusual activity was still detected.",
+          "boundary_drift": "Temporary controlled-test configuration; normal version was restored.",
+          "token_velocity": "Token rate not measured; interaction activity is a separate metric."
+        }
       }
     }
   ],
@@ -2845,7 +2860,12 @@
           "token_velocity": "Historical validated workflow snapshot; projected-exhaustion warning. The baseline was not ready, so the reading does not establish a usage spike."
         },
         "scenario_label": "Rejected payout action",
-        "recommendation_visibility": "PRODUCT_DEMONSTRATION"
+        "recommendation_visibility": "PRODUCT_DEMONSTRATION",
+        "kri_context_short": {
+          "blast_radius": "New-connection exposure only; a payout policy violation was still flagged.",
+          "boundary_drift": "No drift signal; the payout action was flagged separately under BL-1.",
+          "token_velocity": "Historical snapshot; exhaustion warning. No usage spike established."
+        }
       }
     },
     "2 · Live Graph Boundary Anomaly": {
@@ -3182,7 +3202,12 @@
           "token_velocity": "No scenario-specific workflow token-usage measurement was recorded."
         },
         "scenario_label": "Unexpected model and missing connections",
-        "recommendation_visibility": "PRODUCT_DEMONSTRATION"
+        "recommendation_visibility": "PRODUCT_DEMONSTRATION",
+        "kri_context_short": {
+          "blast_radius": "Direct new-connection exposure; downstream impact not assessed.",
+          "boundary_drift": "Expected connections were not observed; skipped steps are not proven.",
+          "token_velocity": "No verified workflow token rate for this trace."
+        }
       }
     },
     "3 · Live Velocity Anomaly": {
@@ -3424,20 +3449,25 @@
           "token_velocity": "No verified workflow token rate was recorded. The interaction-rate finding is displayed separately."
         },
         "scenario_label": "Unusual claims activity",
-        "recommendation_visibility": "PRODUCT_DEMONSTRATION"
+        "recommendation_visibility": "PRODUCT_DEMONSTRATION",
+        "kri_context_short": {
+          "blast_radius": "No new-connection exposure; unusual activity was still detected.",
+          "boundary_drift": "Temporary controlled-test configuration; normal version was restored.",
+          "token_velocity": "Token rate not measured; interaction activity is a separate metric."
+        }
       }
     }
   },
   "dashboard_presentation": {
-    "version": "1.0-product-demonstration",
+    "version": "1.1-product-demonstration",
     "mode": "PRODUCT_DEMONSTRATION",
     "scenario_collection": "dashboard_scenarios_by_name",
     "brand": "GUARDIUMONE",
     "instructions": [
-      "Read the scenario background and inspect the dashboard.",
-      "Evaluate the situation using the information available.",
-      "Record your recommended action in the survey form.",
-      "Use the Scenario dropdown to navigate to the next scenario."
+      "Read the scenario and examine the dashboard.",
+      "Evaluate the situation using the evidence.",
+      "Record your recommended action in the survey.",
+      "Select the next scenario in the dropdown."
     ],
     "overview_fields": [
       {
@@ -3568,7 +3598,7 @@
       "OBSERVED_NOT_APPROVED_POLICY_REJECTED": {
         "label": "Policy rejected",
         "meaning": "A policy rejection signal was recorded; prevention of the business action is not confirmed.",
-        "style": "flagged"
+        "style": "violation"
       },
       "OBSERVED_NOT_APPROVED_NEW_EDGE": {
         "label": "Unexpected connection",
