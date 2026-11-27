@@ -23,27 +23,52 @@ st.markdown('''
 <style>
 .stApp{background:#07090e;color:#f1f1ef}
 [data-testid="stSidebar"]{background:#10141c}
-[data-testid="stMetric"]{background:#10141c;border:1px solid #303139;padding:14px;border-radius:8px;min-height:106px}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.7rem}
+.scenario-position{margin:4px 0 0;color:#87b9e7;font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.sidebar-steps{list-style:none;counter-reset:steps;margin:0;padding:0}
+.sidebar-steps li{counter-increment:steps;position:relative;padding:8px 0 8px 34px;line-height:1.45;font-size:.92rem;color:#cbd5df}
+.sidebar-steps li::before{content:counter(steps);position:absolute;left:0;top:8px;width:23px;height:23px;border-radius:50%;display:grid;place-items:center;background:#202f40;border:1px solid #394c62;color:#99c5eb;font-weight:600;font-size:.75rem}
+.sidebar-steps li:last-child{font-weight:700;color:#f4f6f9}
+[data-testid="stMetric"]{background:#121824;border:1px solid #354154;padding:15px 16px;border-radius:9px;min-height:116px;border-top:2px solid #7eacd6}
+[data-testid="stMetricLabel"]{color:#cbd5e3;font-weight:600}
 [data-testid="stMetricLabel"] p{white-space:normal!important;overflow-wrap:anywhere}
-[data-testid="stMetricValue"]{color:#edcd8c;font-size:clamp(.95rem,1.75vw,1.45rem);line-height:1.35}
+[data-testid="stMetricValue"]{color:#f1d29a;font-size:clamp(1.12rem,2.1vw,1.85rem);line-height:1.24;font-weight:600;font-variant-numeric:tabular-nums}
 [data-testid="stMetricValue"] *{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
 [data-testid="stMarkdownContainer"] p{line-height:1.55}
 [data-testid="stCaptionContainer"] p{color:#a8b4c4;line-height:1.45}
 h1,h2,h3{letter-spacing:-.025em}
-.overview-panel{border:1px solid #93622b;background:#15191c;color:#f1f1ef;border-radius:9px;padding:18px 20px;margin:10px 0 18px}
-.overview-panel h3{margin:0 0 4px;color:#ffce94;font-size:1.25rem}
+[data-testid="stMainBlockContainer"] h2{margin-top:.55rem}
+[data-testid="stMainBlockContainer"] h3{margin-top:.45rem}
+.kri-note{font-size:.9rem;line-height:1.45;color:#b5c1cf;margin:3px 0 7px}
+.kri-technical{font-size:.76rem;letter-spacing:.04em;color:#9fadc0;text-transform:uppercase;margin:2px 0}
+ .overview-panel{border:1px solid #354151;border-top:3px solid #87b9e7;background:#151b24;color:#f1f1ef;border-radius:10px;padding:18px 20px;margin:10px 0 18px}
+.overview-panel h3{margin:0 0 4px;color:#d3e8ff;font-size:1.25rem}
 .overview-panel .ov-subtitle{color:#adb7c6;margin:0 0 14px;font-size:.91rem}
-.ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
+ .ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}
+.behavior-panel{border:1px solid #3b4653;border-top:3px solid #82c8a4;background:#182721;border-radius:8px;padding:13px 15px;margin:8px 0 2px;min-width:0}
+.behavior-panel.actual{background:#2b241c;border-color:#604323;border-top-color:#ffad50}
+.behavior-panel.expected strong{color:#a6e0c3}
+.behavior-panel.actual strong{color:#ffd19f}
+.behavior-panel strong{display:block;font-size:.95rem;margin-bottom:5px}
+.behavior-panel p{margin:0;line-height:1.55;overflow-wrap:anywhere}
 .ov-field{border-top:1px solid #3c424c;padding:10px 0;min-width:0}
 .ov-field.wide{grid-column:1/-1}
 .ov-field strong,.ov-status strong,.ov-unknown strong{display:block;color:#edc492;font-size:.94rem;margin-bottom:4px}
 .ov-field p,.ov-status p,.ov-unknown p{margin:0;line-height:1.55;overflow-wrap:anywhere}
 .ov-status-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0}
 .ov-status{background:#1e242d;border:1px solid #39424e;border-radius:6px;padding:11px;min-width:0}
-.ov-status p{font-size:.96rem}
+.ov-status p{font-size:.94rem}
+.ov-status small{color:#aeb8c7;font-size:.77rem}
+.status-badge{display:inline-flex;align-items:center;gap:6px;border-radius:5px;padding:5px 8px;margin:5px 0 8px;font-weight:650;font-size:.8rem;line-height:1.25;max-width:100%;overflow-wrap:anywhere}
+.status-badge::before{content:"";width:7px;height:7px;background:currentColor;border-radius:50%;flex:none}
+.status-badge.approved{color:#a6e0c3;background:#20392d;border:1px solid #3e7656}
+.status-badge.flagged{color:#ffd09b;background:#39291b;border:1px solid #97672e}
+.status-badge.violation{color:#ffc1c1;background:#41252a;border:1px solid #96525b}
+.status-badge.unknown{color:#d0d8e5;background:#292f39;border:1px solid #505c6d}
+.status-badge.context{color:#b9dcff;background:#23384c;border:1px solid #4c6b8a}
 .ov-unknown{background:#22262c;border:1px solid #484e58;padding:12px;border-radius:6px;margin-top:7px}
 .ov-unknown strong{color:#e1e6ed}
-.next-step{background:#302218;border:1px solid #d39447;border-left:5px solid #ff951f;color:#f9ead6;border-radius:8px;padding:19px 21px;margin:14px 0}
+ .next-step{background:linear-gradient(100deg,#35291e,#28211a);border:1px solid #d39447;border-left:5px solid #ffad50;color:#f9ead6;border-radius:9px;padding:21px 23px;margin:16px 0}
 .next-step h3{color:#ffca8e;font-size:1.35rem;margin:0 0 7px}
 .next-step p{font-size:1.16rem;line-height:1.6;margin:0}
 .context-metric{background:#141b24;border:1px solid #3b4554;border-radius:7px;padding:12px;margin:8px 0}
@@ -54,7 +79,15 @@ h1,h2,h3{letter-spacing:-.025em}
 .graph-evidence th{color:#d9c09c;font-weight:600}
 .graph-status{font-weight:600}
 .graph-status.approved{color:#82c8a4}.graph-status.flagged{color:#ffad50}
-.graph-status.missing{color:#c0c4cf}.graph-status.other{color:#a0aaba}
+ .graph-status.missing{color:#c0c4cf}.graph-status.other{color:#a0aaba}.graph-status.violation{color:#ff9b9b}
+.graph-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:5px 0 8px}
+.graph-chip{display:inline-flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid #3a4655;border-radius:5px;background:#151d28;color:#d7dfeb;font-size:.79rem;line-height:1.4}
+.graph-chip::before{content:"";width:20px;height:0;border-top:3px solid #a0aaba}
+.graph-chip.approved::before{border-color:#65a78b}
+.graph-chip.flagged::before{border-color:#ff951f}
+.graph-chip.violation::before{border-color:#f07882}
+.graph-chip.missing::before{border-color:#a0a7b2;border-top-style:dashed}
+.graph-chip.other::before{border-color:#637082}
 .stButton>button{border:1px solid #b97735;background:#171c25;color:#ffb05e}
 @media(max-width:720px){.overview-panel{padding:13px}.ov-grid,.ov-status-row{grid-template-columns:minmax(0,1fr)}.graph-evidence{font-size:.82rem}}
 </style>
@@ -180,8 +213,11 @@ def render_kri_cards(scenario):
         with column:
             st.metric(spec['label'], display_metric(spec, metric, scenario),
                       help=f"{spec['technical_label']}: {spec['definition']}")
-            st.caption(spec['technical_label'])
-            st.write(view.get('kri_context', {}).get(spec['key'], metric.get('basis', MISSING)))
+            full_context = view.get('kri_context', {}).get(spec['key'], metric.get('basis', MISSING))
+            short_context = view.get('kri_context_short', {}).get(spec['key'], full_context)
+            st.markdown('<div class="kri-technical">' + ESC(spec['technical_label'])
+                        + '</div><div class="kri-note">' + ESC(short_context) + '</div>',
+                        unsafe_allow_html=True)
             if metric.get('snapshot_label'):
                 st.caption(metric['snapshot_label'])
     with st.expander('Technical KRI definitions and measurement scope'):
@@ -189,13 +225,45 @@ def render_kri_cards(scenario):
             metric = scenario['kri_details'][spec['key']]
             st.markdown(f"**{spec['technical_label']}**")
             st.write(spec['definition'])
+            full_context = view.get('kri_context', {}).get(spec['key'])
+            if full_context:
+                st.write(full_context)
             st.caption('Original measurement: ' + str(metric.get('display', MISSING)))
             if metric.get('basis'):
                 st.caption(metric['basis'])
 
 
+def decision_badge(scenario):
+    """Presentation status uses explicit backend evidence, not the scenario name."""
+    evidence = scenario.get('evidence', {})
+    policy = str(evidence.get('policy_status') or '').upper()
+    if policy == 'REJECTED':
+        return 'Policy rejection recorded', 'violation'
+    if evidence.get('policy_violation') is True:
+        return 'Policy violation flagged', 'violation'
+    if evidence.get('tier1_flagged') is True:
+        return 'Review required', 'flagged'
+    if policy in ('APPROVED', 'AUTHORIZED', 'ALLOWED'):
+        return 'Approved by policy', 'approved'
+    return 'Decision not supplied', 'unknown'
+
+
+def risk_badge(scenario):
+    """Never convert Tier 1 policy severity into a composite risk rating."""
+    evidence = scenario.get('evidence', {})
+    level = str(evidence.get('composite_risk_level') or '').upper()
+    colors = {'LOW':'approved', 'MEDIUM':'flagged', 'HIGH':'violation', 'CRITICAL':'violation'}
+    if level in colors:
+        return level.title() + ' composite risk', colors[level]
+    return 'Composite risk not assessed', 'unknown'
+
+
+def badge_html(label, tone):
+    return '<span class="status-badge ' + ESC(tone) + '">' + ESC(label) + '</span>'
+
+
 def render_overview(scenario):
-    """The explanatory panel uses the JSON field configuration, not scenario branches."""
+    """Scenario content remains in the JSON; layout and badge styles are reusable."""
     view = scenario['business_view']
     fields = config['overview_fields']
 
@@ -204,10 +272,19 @@ def render_overview(scenario):
         raw_path = field.get('technical_ref')
         raw = read_path(scenario, raw_path) if raw_path else None
         raw_line = f'<p><small>Recorded status: {ESC(raw)}</small></p>' if raw is not None else ''
-        return f'<div class="{classes}"><strong>{ESC(field["label"])}</strong><p>{ESC(value)}</p>{raw_line}</div>'
+        badge = ''
+        if field['field'] == 'system_decision_business':
+            badge = badge_html(*decision_badge(scenario))
+        elif field['field'] == 'risk_summary':
+            badge = badge_html(*risk_badge(scenario))
+        return f'<div class="{classes}"><strong>{ESC(field["label"])}</strong>{badge}<p>{ESC(value)}</p>{raw_line}</div>'
 
-    opening = ''.join(item(field, 'ov-field wide' if i == 0 else 'ov-field')
-                      for i, field in enumerate(fields[:3]))
+    opening = ''.join(
+        item(field, 'behavior-panel expected' if field['field'] == 'expected_behavior'
+             else 'behavior-panel actual' if field['field'] == 'reviewer_context.observed_action'
+             else 'ov-field wide')
+        for field in fields[:3]
+    )
     statuses = ''.join(item(field, 'ov-status') for field in config['overview_status_fields'])
     closing = ''.join(item(field, 'ov-field wide') for field in fields[3:-1])
     last = item(fields[-1], 'ov-unknown')
@@ -300,13 +377,14 @@ def mermaid_code(rows):
     lines = ['flowchart LR']
     for node, ident in ids.items():
         lines.append(f'{ident}["{clean(entity_label(node))}"]')
-    styles = {'approved':[], 'flagged':[], 'missing':[], 'other':[]}
+    styles = {'approved':[], 'flagged':[], 'violation':[], 'missing':[], 'other':[]}
     for index, row in enumerate(rows):
         label = clean(row['label'])
         lines.append(f'{ids[row["source"]]} -->|"{label}"| {ids[row["target"]]}')
         styles.get(row['style'], styles['other']).append(index)
     colors = {'approved':'stroke:#65a78b,stroke-width:2px;',
               'flagged':'stroke:#ff951f,stroke-width:4px;',
+              'violation':'stroke:#f07882,stroke-width:4px;',
               'missing':'stroke:#a0a7b2,stroke-width:3px,stroke-dasharray:5 5;',
               'other':'stroke:#637082,stroke-width:1.5px;'}
     for style, indices in styles.items():
@@ -318,7 +396,7 @@ def mermaid_code(rows):
 
 def render_graph(rows, height=450, *, fit_to_panel=False):
     """Render the full overview without an inner scrollbar; preserve the focused view."""
-    colors = {'approved':'#82c8a4','flagged':'#ffad50','missing':'#c0c4cf','other':'#9ca8bc'}
+    colors = {'approved':'#82c8a4','flagged':'#ffad50','violation':'#ff9b9b','missing':'#c0c4cf','other':'#9ca8bc'}
     fallback = ''.join(
         f'<div class="edge-row"><div class="node">{ESC(entity_label(r["source"]))}</div>'
         f'<div class="edge" style="color:{colors.get(r["style"],colors["other"])}">→<small>{ESC(r["label"])}</small></div>'
@@ -403,10 +481,18 @@ def render_graph(rows, height=450, *, fit_to_panel=False):
     }}
     </script>'''
     components.html(doc, height=height, scrolling=not fit_to_panel)
-    states = dict.fromkeys(row['state'] for row in rows)
-    legend = [f"{graph_state_info(state)['label']}: {graph_state_info(state)['meaning']}" for state in states]
-    if legend:
-        st.caption(' · '.join(legend))
+    states = list(dict.fromkeys(row['state'] for row in rows))
+    legend_items = [graph_state_info(state) for state in states]
+    if legend_items:
+        chips = ''.join(
+            '<span class="graph-chip ' + ESC(item['style']) + '" title="' + ESC(item['meaning'])
+            + '">' + ESC(item['label']) + '</span>' for item in legend_items
+        )
+        st.markdown('<div class="graph-legend" aria-label="Graph legend">' + chips + '</div>',
+                    unsafe_allow_html=True)
+        with st.expander('Graph legend definitions'):
+            for item in legend_items:
+                st.write(item['label'] + ': ' + item['meaning'])
 
 
 def render_graph_evidence(rows, scenario):
@@ -518,18 +604,18 @@ if st.session_state.get('view_level') not in (1, 2):
 with st.sidebar:
     st.title(config['brand'])
     st.caption('AgentMonitor · Executive Risk Console')
+    position = scenario_keys.index(st.session_state.scenario_key) + 1
+    st.markdown(f'<p class="scenario-position">Scenario {position} of {len(scenario_keys)}</p>',
+                unsafe_allow_html=True)
     st.selectbox('Scenario', scenario_keys, key='scenario_key',
                  format_func=lambda k: k.split(' · ', 1)[0] + ' · ' + scenarios[k]['business_view']['scenario_label']
                  if ' · ' in k else scenarios[k]['business_view']['scenario_label'],
-                 on_change=set_level, args=(1,))
+                 on_change=set_level, args=(1,), label_visibility='collapsed')
     st.divider()
-    st.subheader('Steps to Use Dashboard')
+    st.subheader('How to Use')
     instructions = config['instructions']
-    for index, instruction in enumerate(instructions, 1):
-        if index == len(instructions):
-            st.markdown(f'**{index}. {instruction}**')
-        else:
-            st.markdown(f'{index}. {instruction}')
+    items = ''.join('<li>' + ESC(instruction) + '</li>' for instruction in instructions)
+    st.markdown('<ol class="sidebar-steps">' + items + '</ol>', unsafe_allow_html=True)
     if st.session_state.view_level == 2:
         st.button('← Back to overview', use_container_width=True, on_click=set_level, args=(1,))
 
