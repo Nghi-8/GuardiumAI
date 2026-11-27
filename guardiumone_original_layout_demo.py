@@ -59,6 +59,8 @@ h1,h2,h3{letter-spacing:-.025em}
 .ov-status{background:#1e242d;border:1px solid #39424e;border-radius:6px;padding:11px;min-width:0}
 .ov-status p{font-size:.94rem}
 .ov-status small{color:#aeb8c7;font-size:.77rem}
+.ov-status .recorded-status{font-size:1.05rem;font-weight:700;color:#f1f1ef;margin:4px 0 8px}
+.ov-status .risk-explanation{font-size:.8rem;color:#aeb8c7;line-height:1.45}
 .status-badge{display:inline-flex;align-items:center;gap:6px;border-radius:5px;padding:5px 8px;margin:5px 0 8px;font-weight:650;font-size:.8rem;line-height:1.25;max-width:100%;overflow-wrap:anywhere}
 .status-badge::before{content:"";width:7px;height:7px;background:currentColor;border-radius:50%;flex:none}
 .status-badge.approved{color:#a6e0c3;background:#20392d;border:1px solid #3e7656}
@@ -277,6 +279,17 @@ def render_overview(scenario):
             badge = badge_html(*decision_badge(scenario))
         elif field['field'] == 'risk_summary':
             badge = badge_html(*risk_badge(scenario))
+            recorded_status = (
+                f'<p class="recorded-status">Recorded status: {ESC(raw)}</p>'
+                if raw is not None else ''
+            )
+            return (
+                f'<div class="{classes}">'
+                f'<strong>{ESC(field["label"])}</strong>'
+                f'{badge}{recorded_status}'
+                f'<p class="risk-explanation">{ESC(value)}</p>'
+                f'</div>'
+            )
         return f'<div class="{classes}"><strong>{ESC(field["label"])}</strong>{badge}<p>{ESC(value)}</p>{raw_line}</div>'
 
     opening = ''.join(
