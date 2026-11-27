@@ -530,10 +530,8 @@ with st.sidebar:
             st.markdown(f'**{index}. {instruction}**')
         else:
             st.markdown(f'{index}. {instruction}')
-    st.info('Validated sandbox evidence · Not a production incident.')
     if st.session_state.view_level == 2:
         st.button('← Back to overview', use_container_width=True, on_click=set_level, args=(1,))
-    st.caption('Product demonstration · Review recommendations and supporting evidence.')
 
 key = st.session_state.scenario_key
 scenario = scenarios[key]
