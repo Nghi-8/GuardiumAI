@@ -1,744 +1,539 @@
-"""GuardiumOne | executive layout + business explainability + validated November 18 ML scenarios.
+"""GuardiumOne — JSON-driven executive risk dashboard (product demonstration).
 
-Run: streamlit run guardiumone_dashboard_explainability.py
-Data: dashboard_handoff_1118.json (same directory).
-No direct DE2 reads, new inference calls, or fabricated KRI measurements.
-The explainability layer is a deterministic presentation of the validated handoff.
+Run: streamlit run guardiumone_dashboard.py
+Keep guardiumone_dashboard_data.json beside this file.
+
+The Python renders the UI. The JSON supplies validated ML results, presentation
+configuration, scenario-specific explanations and the recommended next step.
+No new ML model calls, inference, or risk calculations are performed.
 """
-import html as html_lib
-import json
 from pathlib import Path
+import html
+import json
+import re
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-ROOT = Path(__file__).parent
-st.set_page_config(page_title='GuardiumOne | Executive Risk Console', layout='wide', page_icon='🛡️')
-st.markdown('''<style>
+DATA_FILE = Path(__file__).with_name('guardiumone_dashboard_data.json')
+st.set_page_config(page_title='GuardiumOne | Executive Risk Console',
+                   layout='wide', page_icon='🛡️')
+
+st.markdown('''
+<style>
 .stApp{background:#07090e;color:#f1f1ef}
 [data-testid="stSidebar"]{background:#10141c}
-div[data-testid="stMetric"]{background:#10141c;border:1px solid #303139;padding:14px;border-radius:9px;min-height:120px;overflow:hidden}
-div[data-testid="stMetricValue"]{color:#edcd8c;font-family:monospace;font-size:clamp(.9rem,1.4vw,1.3rem);line-height:1.3}
-div[data-testid="stMetricValue"] *{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
+[data-testid="stMetric"]{background:#10141c;border:1px solid #303139;padding:14px;border-radius:8px;min-height:106px}
 [data-testid="stMetricLabel"] p{white-space:normal!important;overflow-wrap:anywhere}
+[data-testid="stMetricValue"]{color:#edcd8c;font-size:clamp(.95rem,1.75vw,1.45rem);line-height:1.35}
+[data-testid="stMetricValue"] *{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
+[data-testid="stMarkdownContainer"] p{line-height:1.55}
+[data-testid="stCaptionContainer"] p{color:#a8b4c4;line-height:1.45}
 h1,h2,h3{letter-spacing:-.025em}
-.explain-panel{background:#171919;border:1px solid #93622b;border-radius:9px;padding:18px 20px;margin:16px 0 8px;color:#f1f1ef}
-.explain-panel h3{color:#ffce94;font-size:1.2rem;margin:0 0 4px}
-.explain-panel .explain-intro{color:#b9bfc7;font-size:.90rem;margin:0 0 12px}
-.explain-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 22px}
-.explain-item{border-top:1px solid #3b3730;padding:12px 0;min-width:0}
-.explain-item strong,.explain-unknown strong{display:block;color:#e7bc8d;font-size:.95rem;margin-bottom:5px}
-.explain-item p,.explain-unknown p{margin:0;line-height:1.55;font-size:1.02rem}
-.explain-unknown{grid-column:1/-1;background:#20242a;border:1px solid #454b52;border-radius:6px;padding:12px;margin-top:4px}
-.explain-unknown strong{color:#e2e6ed}
-@media(max-width:680px){.explain-grid{grid-template-columns:minmax(0,1fr)}.explain-panel{padding:14px}}
-/* Larger essential copy; keep detailed help in tooltips/expanders. */
-[data-testid="stMarkdownContainer"] p {font-size:1.02rem;line-height:1.65}
-[data-testid="stCaptionContainer"] p {font-size:.91rem;line-height:1.48}
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {font-size:.83rem}
-.summary-lead{font-size:1.17rem;line-height:1.55;color:#f1f1ef;margin:0 0 .65rem 0}
-.status-line{padding:.65rem .9rem;background:#171d24;border-left:4px solid #ff951f;border-radius:6px;font-size:1.02rem}
-.focus-note{font-size:1.03rem;line-height:1.6;color:#ebeff0}
-/* More separation through whitespace; fewer gray horizontal bars. */
-.block-gap{height:1.3rem}
+.overview-panel{border:1px solid #93622b;background:#15191c;color:#f1f1ef;border-radius:9px;padding:18px 20px;margin:10px 0 18px}
+.overview-panel h3{margin:0 0 4px;color:#ffce94;font-size:1.25rem}
+.overview-panel .ov-subtitle{color:#adb7c6;margin:0 0 14px;font-size:.91rem}
+.ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
+.ov-field{border-top:1px solid #3c424c;padding:10px 0;min-width:0}
+.ov-field.wide{grid-column:1/-1}
+.ov-field strong,.ov-status strong,.ov-unknown strong{display:block;color:#edc492;font-size:.94rem;margin-bottom:4px}
+.ov-field p,.ov-status p,.ov-unknown p{margin:0;line-height:1.55;overflow-wrap:anywhere}
+.ov-status-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0}
+.ov-status{background:#1e242d;border:1px solid #39424e;border-radius:6px;padding:11px;min-width:0}
+.ov-status p{font-size:.96rem}
+.ov-unknown{background:#22262c;border:1px solid #484e58;padding:12px;border-radius:6px;margin-top:7px}
+.ov-unknown strong{color:#e1e6ed}
+.next-step{background:#302218;border:1px solid #d39447;border-left:5px solid #ff951f;color:#f9ead6;border-radius:8px;padding:19px 21px;margin:14px 0}
+.next-step h3{color:#ffca8e;font-size:1.35rem;margin:0 0 7px}
+.next-step p{font-size:1.16rem;line-height:1.6;margin:0}
+.context-metric{background:#141b24;border:1px solid #3b4554;border-radius:7px;padding:12px;margin:8px 0}
+.context-metric strong{color:#f0d3a4}
+.context-metric .context-note{color:#b5c1cf;font-size:.92rem;margin:7px 0 0}
+.graph-evidence{width:100%;border-collapse:collapse;table-layout:auto;font-size:.92rem}
+.graph-evidence th,.graph-evidence td{text-align:left;vertical-align:top;padding:9px 7px;border-bottom:1px solid #363c47;overflow-wrap:anywhere}
+.graph-evidence th{color:#d9c09c;font-weight:600}
+.graph-status{font-weight:600}
+.graph-status.approved{color:#82c8a4}.graph-status.flagged{color:#ffad50}
+.graph-status.missing{color:#c0c4cf}.graph-status.other{color:#a0aaba}
+.stButton>button{border:1px solid #b97735;background:#171c25;color:#ffb05e}
+@media(max-width:720px){.overview-panel{padding:13px}.ov-grid,.ov-status-row{grid-template-columns:minmax(0,1fr)}.graph-evidence{font-size:.82rem}}
+</style>
+''', unsafe_allow_html=True)
 
-.pill{display:inline-block;padding:5px 10px;border-radius:5px;background:#322013;color:#ff951f;font-weight:700}
-.stButton>button{border:1px solid #ff951f;background:#151a23;color:#ff951f}
-</style>''', unsafe_allow_html=True)
+
+def stop_with_error(message):
+    st.error(message)
+    st.stop()
+
 
 try:
-    with (ROOT / 'dashboard_handoff_1118.json').open(encoding='utf-8-sig') as handle:
+    with DATA_FILE.open(encoding='utf-8-sig') as handle:
         data = json.load(handle)
-except (OSError, ValueError) as exc:
-    st.error('Cannot read the validated ML handoff. Place dashboard_handoff_1118.json beside this Python script.')
-    st.code(str(exc))
-    st.stop()
+    if data['handoff_status'] != 'FINAL_VALIDATED_FOR_DASHBOARD':
+        raise ValueError('The source handoff is not marked as validated.')
+    config = data['dashboard_presentation']
+    if config['mode'] != 'PRODUCT_DEMONSTRATION':
+        raise ValueError('Unsupported presentation mode.')
+    scenarios = data[config['scenario_collection']]
+    if not isinstance(scenarios, dict) or not scenarios:
+        raise ValueError('No configured scenarios were supplied.')
+    if config['scenario_collection'] != data['display_contract']['scenario_collection_for_existing_streamlit_pattern']:
+        raise ValueError('Scenario collection does not match the ML display contract.')
+except (OSError, ValueError, KeyError, TypeError) as exc:
+    stop_with_error(f'Cannot load dashboard data: {exc}. Keep {DATA_FILE.name} beside this script.')
 
-if data.get('handoff_status') != 'FINAL_VALIDATED_FOR_DASHBOARD':
-    st.error('The supplied handoff is not marked FINAL_VALIDATED_FOR_DASHBOARD.')
-    st.stop()
-
-scenarios = data['dashboard_scenarios_by_name']
-scenario_keys = list(scenarios)
-if not scenario_keys:
-    st.error('No validated scenarios supplied by the ML handoff.')
-    st.stop()
-
-# The approved KRI definitions are retained. Only the Data Sensitivity entry
-# and its card are removed; the Token Velocity availability sentence is updated.
-KRI_HELP = {
-    'BLAST RADIUS': (
-        'Count of distinct resources directly targeted by NEW_EDGE relationships. '
-        'Formula: count of unique target IDs across observed new relationships. '
-        'Repeat signals and multiple agents targeting one resource do not increase the count. '
-        'No downstream propagation or confirmed compromise is implied.'
-    ),
-    'BOUNDARY DRIFT': (
-        'Count of distinct observed source–relationship–target triples absent from the '
-        'proposed reference topology. Repeat NEW_EDGE signals for the same triple '
-        'count only once. A new relationship does not automatically mean a policy breach.'
-    ),
-    'TOKEN VELOCITY': (
-        'Sum of recorded LLM input and output tokens in a fixed monitoring window, '
-        'divided by elapsed window minutes (tokens/min). Compare to similar historical '
-        'windows before assessing a spike; without enough history, report '
-        '“Insufficient history.” DE2 interaction counts are not token counts. '
-        'A validated historical workflow token measurement is available only for the rejected-interaction scenario.'
-    ),
-}
-
-# Stable per-scenario event details from ML; never use a missing/velocity event
-# as a token-usage measurement from another workflow.
-DETAIL_PATH = {
-    scenario_keys[0]: ('level_2',),
-    scenario_keys[1]: ('additional_validated_events', 'graph_boundary_anomaly'),
-    scenario_keys[2]: ('additional_validated_events', 'velocity_anomaly'),
-}
-
-def get_detail(key):
-    value = data
-    for part in DETAIL_PATH[key]:
-        value = value[part]
-    return value
+MISSING = 'Not supplied'
+ESC = lambda value: html.escape(str(value))
 
 
-def nice_entity(value):
-    if value.startswith('agent-'):
-        return 'Agent: ' + value.removeprefix('agent-')
-    if value.startswith('tool:'):
-        return value.split(':')[-1].replace('_', ' ') + ' (tool)'
-    if value.startswith('model:'):
-        return value.split(':')[-1] + ' (model)'
-    return value
+def read_path(obj, path, default=None):
+    """Read a dotted or explicit list path without evaluating user-provided code."""
+    parts = path.split('.') if isinstance(path, str) else path
+    try:
+        for part in parts:
+            obj = obj[part]
+        return default if obj is None else obj
+    except (KeyError, TypeError, IndexError):
+        return default
 
 
-# Presentation-only explanations, reviewed against the validated November 18 handoff.
-# These do not change detection results, calculate risk scores, or tell participants
-# which governance action to take. Potential impact is explicitly hypothetical.
-SCENARIO_GUIDE = {
-    'REJECTED_INTERACTION': {
-        'short_name': 'Rejected payout action',
-        'headline': 'Customer-service agent attempted a payout action',
-        'what': 'A customer-service AI agent attempted to use a payout approval tool, outside its assigned role of answering policy questions.',
-        'expected': 'Answer policyholders’ questions about insurance coverage and policy status. Do not approve or send payouts.',
-        'actual': 'The agent attempted to use the payout approval tool.',
-        'why': 'Company policy prohibits customer-service agents from approving or sending payouts. The monitoring system flagged the action under rule BL-1.',
-        'impact': 'If completed, an unauthorized payment could lead to financial loss or violations of internal approval procedures.',
-        'unknown': 'Whether a payout completed or was prevented is unconfirmed. The agent’s intent is uncertain; containment was not measured.',
-    },
-    'GRAPH_BOUNDARY_ANOMALY': {
-        'short_name': 'Unexpected model and missing connections',
-        'headline': 'Unexpected AI model and missing expected connections',
-        'what': 'A claims-processing agent used an unapproved AI model. Two expected tool connections were not observed in the same recorded trace.',
-        'expected': 'Use the approved AI model, retrieve claim information and verify policy coverage as part of the approved workflow.',
-        'actual': 'The agent connected to Gemini 3.5 Flash. Connections to the claim retrieval and policy coverage verification tools were not observed.',
-        'why': 'The new model connection is outside the approved workflow, and two expected tool connections are absent from the recorded trace.',
-        'impact': 'Claims could be processed incorrectly, or information could be handled outside approved systems.',
-        'unknown': 'The reason for the missing connections and any downstream harm are unknown. Deeper analysis was triggered but not executed; missing connections do not prove that steps were skipped.',
-    },
-    'VELOCITY_ANOMALY': {
-        'short_name': 'Unusual claims-tool activity',
-        'headline': 'Unusual claims-tool activity',
-        'what': 'A claims agent used an approved claim-retrieval tool at a higher interaction rate than its recorded baseline during a controlled test.',
-        'expected': 'Retrieve claim information using the approved tool at a typical activity level.',
-        'actual': 'The approved claim retrieval connection was used unusually frequently.',
-        'why': 'The interaction activity exceeded its configured monitoring threshold.',
-        'impact': 'If sustained outside the controlled test, unusually high activity could increase system load or operational overhead.',
-        'unknown': 'Whether the extra activity was necessary or harmful is unknown. Deeper analysis was triggered but not executed, and AI token consumption was not measured.',
-    },
-}
-
-KRI_LABELS = {
-    'BLAST RADIUS': 'Potential Scope of Impact',
-    'BOUNDARY DRIFT': 'Workflow Deviation',
-    'TOKEN VELOCITY': 'AI Resource Usage Rate',
-}
+def scenario_detail(scenario):
+    """Resolve a stable JSON evidence reference, then verify incident identity."""
+    ref = read_path(scenario, 'business_view.detail_ref')
+    if not isinstance(ref, list) or not ref:
+        raise ValueError('Scenario is missing a detail_ref.')
+    detail = read_path(data, ref)
+    if not isinstance(detail, dict):
+        raise ValueError('The configured evidence reference does not exist.')
+    primary = detail.get('selected_event') or detail.get('primary_event')
+    if not isinstance(primary, dict) or primary.get('event_id') != scenario.get('incident'):
+        raise ValueError('The configured event reference does not match the scenario incident ID.')
+    return detail, primary
 
 
-def scenario_explanation(signal_type, scenario):
-    """Use the validated scenario guide and actual handoff measurements."""
-    guide = dict(SCENARIO_GUIDE[signal_type])
-    if signal_type == 'VELOCITY_ANOMALY':
-        activity = scenario['evidence'].get('interaction_velocity', {})
-        current = activity.get('current_rate')
-        baseline = activity.get('baseline_rate')
-        threshold = activity.get('threshold')
-        window = activity.get('window_minutes')
-        if all(isinstance(v, (int, float)) and not isinstance(v, bool)
-               for v in (current, baseline, threshold, window)):
-            guide['actual'] = (
-                f'{current:g} interactions were recorded in a {window:g}-minute monitoring window, '
-                f'compared with a recorded baseline of approximately {baseline:.2f}.'
-            )
-            guide['why'] = (
-                f'The recorded interaction count exceeded the configured threshold of {threshold:g}.'
-            )
-            if baseline > 0:
-                guide['why'] += f' Activity was approximately {current / baseline:.1f} times the baseline.'
-    return guide
+def validate_scenario(scenario):
+    view = scenario['business_view']
+    for field in config['overview_fields'] + config['overview_status_fields'] + config['reviewer_fields']:
+        if not isinstance(read_path(view, field['field']), str):
+            raise ValueError(f"Missing presentation field: {field['field']}")
+    for field in ('business_title', 'scenario_label', 'recommended_next_step'):
+        if not isinstance(view.get(field), str) or not view[field].strip():
+            raise ValueError(f'Missing presentation field: {field}')
+    for spec in config['kri_cards']:
+        if spec['key'] not in scenario['kri_details']:
+            raise ValueError(f"Missing validated metric: {spec['key']}")
+    scenario_detail(scenario)
 
 
-def render_explainability(guide):
-    """Level 1 business explanation; no recommended action or ground truth."""
-    fields = [
-        ('Expected behavior', 'expected'),
-        ('Actual behavior', 'actual'),
-        ('Why was it flagged?', 'why'),
-        ('Potential business impact', 'impact'),
-    ]
-    escaped = html_lib.escape
-    items = ''.join(
-        '<div class="explain-item"><strong>' + escaped(label) + '</strong><p>'
-        + escaped(guide[field]) + '</p></div>'
-        for label, field in fields
-    )
+try:
+    for scenario in scenarios.values():
+        validate_scenario(scenario)
+except (KeyError, TypeError, ValueError) as exc:
+    stop_with_error(f'Dashboard presentation contract is incomplete: {exc}')
+
+
+def entity_label(identifier):
+    known = config.get('entity_labels', {}).get(identifier)
+    if known:
+        return known
+    identifier = str(identifier)
+    if identifier.startswith('tool:'):
+        return identifier.rsplit(':', 1)[-1].replace('_', ' ').capitalize()
+    if identifier.startswith('model:'):
+        return identifier.split(':', 2)[-1] + ' (model)'
+    return identifier.replace('_', ' ')
+
+
+def display_metric(spec, metric, scenario):
+    """Format validated evidence without substituting another KRI or making up counts."""
+    status = metric.get('status')
+    if status in ('NOT_MEASURED', 'NOT_ASSESSED'):
+        return config.get('display_statuses', {}).get(status, status.replace('_', ' ').capitalize())
+    raw = metric.get('display')
+    if raw is None:
+        raw = read_path(scenario, ['risk_data', spec['legacy_key']], MISSING)
+    raw = str(raw)
+    translated = config.get('display_translations', {}).get(raw)
+    if translated:
+        return translated
+    if spec.get('format') == 'scope':
+        # Accept any validated agent/target counts, not just 0/0 or 1/1.
+        match = re.fullmatch(r'(\d+) agents? / (\d+) targets?', raw, re.I)
+        if match:
+            agents, targets = map(int, match.groups())
+            return f"{agents} agent{'s' if agents != 1 else ''} / {targets} resource{'s' if targets != 1 else ''}"
+    elif spec.get('format') == 'connection_changes':
+        match = re.fullmatch(r'(\d+) new edges? / (\d+) missing edges?', raw, re.I)
+        if match:
+            new, missing = map(int, match.groups())
+            return f'{new} unexpected / {missing} not observed'
+    return raw
+
+
+def render_kri_cards(scenario):
+    """Loop over common KRI definitions; individual values always come from ML."""
+    view = scenario['business_view']
+    definitions = config['kri_cards']
+    st.subheader('Executive Risk Indicators (KRIs)')
+    for column, spec in zip(st.columns(len(definitions)), definitions):
+        metric = scenario['kri_details'][spec['key']]
+        with column:
+            st.metric(spec['label'], display_metric(spec, metric, scenario),
+                      help=f"{spec['technical_label']}: {spec['definition']}")
+            st.caption(spec['technical_label'])
+            st.write(view.get('kri_context', {}).get(spec['key'], metric.get('basis', MISSING)))
+            if metric.get('snapshot_label'):
+                st.caption(metric['snapshot_label'])
+    with st.expander('Technical KRI definitions and measurement scope'):
+        for spec in definitions:
+            metric = scenario['kri_details'][spec['key']]
+            st.markdown(f"**{spec['technical_label']}**")
+            st.write(spec['definition'])
+            st.caption('Original measurement: ' + str(metric.get('display', MISSING)))
+            if metric.get('basis'):
+                st.caption(metric['basis'])
+
+
+def render_overview(scenario):
+    """The explanatory panel uses the JSON field configuration, not scenario branches."""
+    view = scenario['business_view']
+    fields = config['overview_fields']
+
+    def item(field, classes='ov-field'):
+        value = read_path(view, field['field'], MISSING)
+        raw_path = field.get('technical_ref')
+        raw = read_path(scenario, raw_path) if raw_path else None
+        raw_line = f'<p><small>Recorded status: {ESC(raw)}</small></p>' if raw is not None else ''
+        return f'<div class="{classes}"><strong>{ESC(field["label"])}</strong><p>{ESC(value)}</p>{raw_line}</div>'
+
+    opening = ''.join(item(field, 'ov-field wide' if i == 0 else 'ov-field')
+                      for i, field in enumerate(fields[:3]))
+    statuses = ''.join(item(field, 'ov-status') for field in config['overview_status_fields'])
+    closing = ''.join(item(field, 'ov-field wide') for field in fields[3:-1])
+    last = item(fields[-1], 'ov-unknown')
     st.markdown(
-        '<section class="explain-panel" aria-label="Business explainability">'
-        '<h3>Understand this event</h3>'
-        '<p class="explain-intro">Business explainability · based on validated sandbox evidence</p>'
-        '<div class="explain-grid">' + items
-        + '<div class="explain-unknown"><strong>What remains unknown</strong><p>'
-        + escaped(guide['unknown']) + '</p></div></div></section>',
+        '<section class="overview-panel" aria-label="Scenario overview">'
+        '<h3>Scenario Overview</h3><p class="ov-subtitle">Understand the event and its business implications</p>'
+        f'<div class="ov-grid">{opening}</div><div class="ov-status-row">{statuses}</div>'
+        f'<div class="ov-grid">{closing}</div>{last}</section>',
         unsafe_allow_html=True,
     )
 
 
-def display_kri_value(name, value):
-    """Translate presentation wording only; retain the original measurement."""
-    translations = {
-        'BLAST RADIUS': {
-            'No NEW_EDGE exposure': 'No exposure through new connections',
-            '1 agent / 1 target': '1 agent / 1 resource',
-            '0 agents / 0 targets': '0 agents / 0 resources',
-        },
-        'BOUNDARY DRIFT': {
-            'No boundary-drift signal': 'No connection drift detected',
-            '1 new edge / 2 missing edges': '1 unexpected / 2 not observed',
-            'Topology version mismatch': 'Different workflow configuration',
-        },
-        'TOKEN VELOCITY': {
-            'Not measured for this event': 'Not measured',
-            'Not measured for this scenario': 'Not measured',
-            '13.40 tokens/min · validated snapshot': '13.40 tokens/min',
-        },
-    }
-    return translations.get(name, {}).get(value, value)
+def render_context_metrics(scenario):
+    """Optional event measurements belong beside scenario evidence, never in another KRI."""
+    for spec in config.get('context_metrics', []):
+        metric = scenario['kri_details'].get(spec['key'])
+        if not isinstance(metric, dict):
+            continue
+        cells = []
+        for item in spec['fields']:
+            value = metric.get(item['key'])
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                value = format(value, item.get('format', 'g')) + item.get('suffix', '')
+            elif value is None:
+                value = MISSING
+            cells.append(f'{ESC(item["label"])}: <strong>{ESC(value)}</strong>')
+        st.markdown('<div class="context-metric"><strong>' + ESC(spec['title'])
+                    + '</strong><p>' + ' &nbsp;·&nbsp; '.join(cells)
+                    + '</p><p class="context-note">' + ESC(spec.get('note', '')) + '</p></div>',
+                    unsafe_allow_html=True)
 
 
-def kri_explanation(signal_type, name):
-    """Short visible context; counts describe the KRI, not all incident impact."""
-    if name == 'BLAST RADIUS':
-        return {
-            'REJECTED_INTERACTION': 'No new-connection exposure was detected. The payout policy violation still involves one agent and one tool.',
-            'GRAPH_BOUNDARY_ANOMALY': 'One AI agent directly connected to one unapproved AI model. Downstream impact is not assessed.',
-            'VELOCITY_ANOMALY': 'Zero agents and resources were counted for new connections in this event. Unusual activity was still detected.',
-        }[signal_type]
-    if name == 'BOUNDARY DRIFT':
-        return {
-            'REJECTED_INTERACTION': 'No connection-drift signal. The payout action was flagged separately under policy BL-1.',
-            'GRAPH_BOUNDARY_ANOMALY': '1 unexpected connection and 2 expected connections not observed in the same trace.',
-            'VELOCITY_ANOMALY': 'The workflow configuration differs because the temporary controlled-test configuration was restored.',
-        }[signal_type]
-    return {
-        'REJECTED_INTERACTION': 'Historical validated AI token usage rate (Nov. 17), not a live rolling measurement or a cost estimate.',
-        'GRAPH_BOUNDARY_ANOMALY': 'AI token usage was not measured in this trace.',
-        'VELOCITY_ANOMALY': 'AI token usage was not measured. Frequent tool interactions are not the same as token consumption.',
-    }[signal_type]
+def pair(edge):
+    return edge['source'], edge['target']
 
 
-def boundary_drift_scope_note(signal_type):
-    """Keep the original distinct-NEW_EDGE definition and explain the extra signals."""
-    if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-        return ('The original Boundary Drift calculation counts distinct unexpected connections. '
-                'This validated scenario also reports two expected connections not observed separately; '
-                'they are not additional NEW_EDGE relationships.')
-    return None
+def graph_state_info(state):
+    states = config['graph_states']
+    return states.get(state, states['UNCLASSIFIED'])
 
 
-def render_kri_cards(scenario, signal_type):
-    """Identical business labels and validated values on both dashboard levels."""
-    risk = scenario['risk_data']
-    values = [
-        ('BLAST RADIUS', risk['blast']),
-        ('BOUNDARY DRIFT', risk['drift']),
-        ('TOKEN VELOCITY', risk['tokens']),
-    ]
-    for col, (name, value) in zip(st.columns(3, gap='medium'), values):
-        with col:
-            st.metric(
-                KRI_LABELS[name],
-                display_kri_value(name, value),
-                help=f'{name.title()} — {KRI_HELP[name]}',
-            )
-            st.caption(name.title())
-            st.write(kri_explanation(signal_type, name))
-    with st.expander('Technical KRI definitions and measurement scope'):
-        for name, value in values:
-            st.markdown('**' + name.title() + '**')
-            st.write(KRI_HELP[name])
-            st.caption('Original handoff value: ' + str(value))
-        scope_note = boundary_drift_scope_note(signal_type)
-        if scope_note:
-            st.info(scope_note)
-        st.caption('No measured new-connection exposure does not mean no risk. Missing or unassessed values are not zero.')
+def graph_relationships(scenario, focus=False):
+    """Use actual graph edges and validated selected-scenario states, not inferred events."""
+    full = data['level_1']['graph']['edges']
+    graph = scenario['graph_rendering']
+    explicit = {pair(e): e for e in graph.get('edge_states', [])}
+    approved = {tuple(e) for e in scenario.get('approved', [])}
+    observed = {tuple(e) for e in scenario.get('observed', [])}
+    current_pair = (scenario.get('agent'), scenario.get('evidence', {}).get('target'))
+    focus_pairs = approved | observed | set(explicit)
+    if not focus_pairs and all(current_pair):
+        focus_pairs.add(current_pair)
+    rows = [dict(e) for e in full if not focus or pair(e) in focus_pairs]
+    if focus:
+        existing = {pair(e) for e in rows}
+        # A compatible new scenario can declare a validated pair not in the full graph.
+        # This uses the supplied approved/observed relationships; no edges are invented.
+        for source, target in sorted(focus_pairs - existing):
+            rows.append({'source': source, 'target': target, 'approved': (source,target) in approved})
+    result = []
+    for edge in rows:
+        key = pair(edge)
+        if key in explicit:
+            state = explicit[key]['state']
+            technical_label = explicit[key].get('label', state)
+        elif key == current_pair and graph.get('edge_state'):
+            state = graph['edge_state']
+            technical_label = graph.get('edge_label', state)
+        elif focus and key in approved and key in observed:
+            state, technical_label = 'APPROVED_AND_OBSERVED', 'APPROVED + OBSERVED'
+        elif focus and key in approved:
+            state, technical_label = 'APPROVED_BASELINE_NOT_OBSERVED_IN_SELECTED_TRACE', 'APPROVED BASELINE / NOT OBSERVED'
+        elif edge.get('approved') is False:
+            state, technical_label = ('UNCLASSIFIED', 'STATUS NOT SUPPLIED') if focus else ('OTHER_VALIDATED_EVENT', 'OTHER VALIDATED EVENT')
+        elif edge.get('approved') is True:
+            state, technical_label = 'APPROVED_BASELINE', 'APPROVED BASELINE'
+        else:
+            state, technical_label = 'UNCLASSIFIED', 'STATUS NOT SUPPLIED'
+        info = graph_state_info(state)
+        result.append({**edge, 'state':state, 'technical_label':technical_label,
+                       'label':info['label'], 'meaning':info['meaning'], 'style':info['style']})
+    return result
 
 
-def readable_status(value):
-    """Readable backend states; original machine values remain in Technical Evidence."""
-    if value is None:
-        return 'Not supplied'
-    states = {
-        'COMPLETED': 'Completed',
-        'ASSESSED': 'Assessed',
-        'NOT_ASSESSED': 'Not assessed',
-        'NOT_MEASURED': 'Not measured',
-        'NOT_EXECUTED_BY_DESIGN': 'Not executed by design',
-        'AWAITING_EXPLICIT_EXECUTION': 'Triggered — not executed by design',
-        'VERSION_MISMATCH': 'Version mismatch — controlled test',
-        'VERSION_MISMATCH_EXPECTED_AFTER_CONTROLLED_TEST_RESTORE': 'Version mismatch — controlled test',
-        'READY': 'Ready',
-    }
-    return states.get(str(value), str(value).replace('_', ' ').capitalize())
-
-
-def evidence_summary(scenario, detail):
-    """Exclude evaluator-only guidance from participant-facing evidence JSON."""
-    ev = scenario['evidence']
-    return {
-        'incident_id': ev['incident_id'],
-        'event_type': ev['event_type'],
-        'agent': ev['agent'],
-        'target': ev['target'],
-        'event_time': ev.get('event_time'),
-        'tier1_flagged': ev.get('tier1_flagged'),
-        'tier2_status': ev.get('tier2_status'),
-        'data_classification_status': ev.get('data_classification_status'),
-        'access_outcome': ev.get('access_outcome'),
-        'token_metrics_status': ev.get('token_metrics_status'),
-        'interaction_velocity': ev.get('interaction_velocity'),
-    }
-
-
-def graph_edges_for_view(scenario_key, focus_event):
-    """Full approved network for Level 1; exact scenario relationships for Level 2."""
-    edges = data['level_1']['graph']['edges']
-    if not focus_event:
-        return edges
-    states = scenarios[scenario_key]['graph_rendering'].get('edge_states') or []
-    if states:
-        relevant = {(item['source'], item['target']) for item in states}
-        return [edge for edge in edges if (edge['source'], edge['target']) in relevant]
-    selected_agent = scenarios[scenario_key]['agent']
-    selected_target = scenarios[scenario_key]['evidence']['target']
-    return [edge for edge in edges if edge['source'] == selected_agent
-            and edge['target'] == selected_target]
-
-
-def edge_display(edge, scenario_key):
-    """Label and style per validated ML edge state, not inferred from historical observed flags."""
-    scenario = scenarios[scenario_key]
-    mode = scenario['graph_rendering']['anomaly_type']
-    states = scenario['graph_rendering'].get('edge_states') or []
-    state = next((s for s in states if s['source'] == edge['source']
-                  and s['target'] == edge['target']), None)
-    if state:
-        state_code = state['state']
-        if state_code in ('OBSERVED_NOT_APPROVED_POLICY_REJECTED', 'OBSERVED_NOT_APPROVED_NEW_EDGE'):
-            return state['label'], 'orange'
-        if state_code in ('APPROVED_NOT_OBSERVED_IN_SELECTED_TRACE',
-                          'APPROVED_BASELINE_NOT_OBSERVED_IN_SELECTED_TRACE'):
-            return state['label'], 'grey'
-        if state_code == 'APPROVED_AND_OBSERVED':
-            return state['label'], 'green'
-    if mode == 'VELOCITY_ANOMALY' and (
-        edge['source'] == scenario['agent'] and
-        edge['target'] == scenario['evidence']['target']
-    ):
-        return 'VELOCITY ANOMALY', 'orange'
-    # A flagged edge from another scenario should NOT be highlighted as the selected finding.
-    if edge.get('approved') is False:
-        return 'OTHER VALIDATED EVENT', 'muted'
-    return 'APPROVED BASELINE', 'green'
-
-
-
-def graph_node_label(value):
-    """Concise display names only; source identifiers in the ML handoff stay intact."""
-    if value.startswith('agent-'):
-        slug = value.removeprefix('agent-')
-        if slug.startswith('cs-'):
-            return 'Customer service agent'
-        if slug.startswith('claims-'):
-            return 'Claims agent'
-        if slug.startswith('orch-'):
-            return 'Orchestrator agent'
-        if slug.startswith('underwriting-'):
-            return 'Underwriting agent'
-        return 'Agent ' + slug[:15]
-    if value.startswith('tool:'):
-        action = value.rsplit(':', 1)[-1].replace('_', ' ')
-        names = {
-            'fetch claim': 'Fetch claim',
-            'verify policy coverage': 'Verify coverage',
-            'approve payout': 'Approve payout',
-            'lookup policy status': 'Policy lookup',
-            'pull credit report': 'Credit report',
-        }
-        return names.get(action, action[:26].title())
-    if value.startswith('model:'):
-        model = value.rsplit(':', 1)[-1]
-        if 'qwen2.5' in model:
-            return 'Qwen 2.5 (3B)'
-        if 'gemini-3.5-flash' in model:
-            return 'Gemini 3.5 Flash'
-        return model[:26]
-    return nice_entity(value)
-
-
-def graph_edge_label(status, full_label):
-    """Business-friendly graph labels; exact state retained in technical evidence."""
-    if status == 'grey':
-        if 'MISSING /' in full_label:
-            return 'Expected / not observed'
-        return 'Approved baseline only'
-    if status == 'orange':
-        if 'REJECTED' in full_label:
-            return 'Policy rejected (BL-1)'
-        if 'UNAPPROVED' in full_label:
-            return 'Unexpected connection'
-        return 'Unusual activity'
-    if status == 'muted':
-        return 'Other event'
-    return 'Approved baseline'
-
-
-def graph_state_legend(scenario_key):
-    mode = scenarios[scenario_key]['graph_rendering']['anomaly_type']
-    if mode == 'GRAPH_BOUNDARY_ANOMALY':
-        return ('Expected / not observed (gray dashed): an expected approved tool connection was not recorded in this trace. '
-                'Approved baseline only (gray dashed): a historically approved model connection was not recorded here. '
-                'Unexpected connection (orange): a model connection outside the approved workflow.')
-    if mode == 'REJECTED_INTERACTION':
-        return ('Policy rejected (orange): the payout connection triggered a policy rejection signal; prevention is not confirmed. '
-                'Approved baseline only (gray dashed): approved connection not recorded in this trace. '
-                'Approved baseline (green): documented approved connection.')
-    return ('Unusual activity (orange): the approved tool connection had an unusually high interaction rate. '
-            'Approved baseline (green): documented approved connection. '
-            'Other event (muted): separate validated evidence.')
-
-
-def graph_mermaid(scenario_key, focus_event=True):
-    """Mermaid directed graph with scenario-scoped evidence styling."""
-    edges = graph_edges_for_view(scenario_key, focus_event)
-    triples = [(e['source'], e['relationship'], e['target']) for e in edges]
-    entities = sorted({node for src, _, dst in triples for node in (src, dst)})
-    node_ids = {name: f'N{i}' for i, name in enumerate(entities)}
+def mermaid_code(rows):
+    """Mermaid graph from the same relationship list as the local fallback."""
+    ids = {n:f'N{i}' for i,n in enumerate(sorted({x for r in rows for x in (r['source'],r['target'])}))}
+    def clean(text):
+        return str(text).replace('"', "'").replace('\n',' ').replace('<','(').replace('>',')')
     lines = ['flowchart LR']
-    for name, nid in node_ids.items():
-        label = graph_node_label(name).replace('"', "'").replace('\n', ' ')
-        lines.append(f'{nid}["{label}"]')
-    styles = {'green': [], 'orange': [], 'grey': [], 'muted': []}
-    for idx, edge in enumerate(edges):
-        label, status = edge_display(edge, scenario_key)
-        label = graph_edge_label(status, label).replace('"', "'")
-        lines.append(f'{node_ids[edge["source"]]} -->|"{label}"| {node_ids[edge["target"]]}')
-        styles[status].append(idx)
-    for kind, css in (
-        ('green', 'stroke:#65a78b,stroke-width:2px;'),
-        ('orange', 'stroke:#ff951f,stroke-width:4px;'),
-        ('grey', 'stroke:#91959f,stroke-width:3px,stroke-dasharray:5 5;'),
-        ('muted', 'stroke:#637082,stroke-width:1.5px;'),
-    ):
-        if styles[kind]:
-            lines.append('linkStyle ' + ','.join(map(str, styles[kind])) + ' ' + css)
+    for node, ident in ids.items():
+        lines.append(f'{ident}["{clean(entity_label(node))}"]')
+    styles = {'approved':[], 'flagged':[], 'missing':[], 'other':[]}
+    for index, row in enumerate(rows):
+        label = clean(row['label'])
+        lines.append(f'{ids[row["source"]]} -->|"{label}"| {ids[row["target"]]}')
+        styles.get(row['style'], styles['other']).append(index)
+    colors = {'approved':'stroke:#65a78b,stroke-width:2px;',
+              'flagged':'stroke:#ff951f,stroke-width:4px;',
+              'missing':'stroke:#a0a7b2,stroke-width:3px,stroke-dasharray:5 5;',
+              'other':'stroke:#637082,stroke-width:1.5px;'}
+    for style, indices in styles.items():
+        if indices:
+            lines.append('linkStyle ' + ','.join(map(str,indices)) + ' ' + colors[style])
     lines.append('classDef default fill:#10141c,stroke:#677080,color:#f2f2f2;')
     return '\n'.join(lines)
 
 
-def render_mermaid(key, focus_event=True):
-    """Render Mermaid explicitly; show the same edges if its CDN is unavailable."""
-    code = graph_mermaid(key, focus_event=focus_event)
-    edges = graph_edges_for_view(key, focus_event)
-    fallback_rows = []
-    for edge in edges:
-        state, style = edge_display(edge, key)
-        accent = {'green': '#65a78b', 'orange': '#ff951f',
-                  'grey': '#b1b4bd', 'muted': '#637082'}[style]
-        source = html_lib.escape(graph_node_label(edge['source']))
-        target = html_lib.escape(graph_node_label(edge['target']))
-        fallback_rows.append(
-            f'<div class="edge-row" style="--accent:{accent}">'
-            f'<span class="node">{source}</span>'
-            f'<span class="edge-label">⟶<small>{html_lib.escape(graph_edge_label(style, state))}</small></span>'
-            f'<span class="node">{target}</span></div>'
-        )
-    fallback = ''.join(fallback_rows) or '<p>No graph relationships provided.</p>'
-    js_code = json.dumps(code).replace('</', '<\\/')
-    embed = f'''<style>
-      body{{background:#07090e;color:#f1f1ef;font:14px system-ui,sans-serif;margin:6px}}
-      #fallback{{display:grid;gap:12px;max-height:425px;overflow:auto;padding:3px}}
+def render_graph(rows, height=450):
+    """Use Mermaid when available; preserve a readable relationship fallback offline."""
+    colors = {'approved':'#82c8a4','flagged':'#ffad50','missing':'#c0c4cf','other':'#9ca8bc'}
+    fallback = ''.join(
+        f'<div class="edge-row"><div class="node">{ESC(entity_label(r["source"]))}</div>'
+        f'<div class="edge" style="color:{colors.get(r["style"],colors["other"])}">→<small>{ESC(r["label"])}</small></div>'
+        f'<div class="node">{ESC(entity_label(r["target"]))}</div></div>'
+        for r in rows) or '<p>No graph relationships supplied.</p>'
+    js_code = json.dumps(mermaid_code(rows)).replace('</','<\\/')
+    doc = f'''<style>
+      body{{background:#07090e;color:#f1f1ef;font:14px system-ui,sans-serif;margin:5px}}
+      #fallback{{display:grid;gap:8px;padding:3px}}
       .edge-row{{display:flex;align-items:center;gap:8px;min-width:0}}
-      .node{{background:#10141c;border:1px solid #677080;border-radius:6px;padding:10px 8px;
-             flex:1;min-width:0;overflow-wrap:anywhere;text-align:center;font-size:14px}}
-      .edge-label{{display:flex;flex-direction:column;align-items:center;gap:4px;
-                   flex:0 0 128px;color:var(--accent);font-size:22px;font-weight:700}}
-      .edge-label small{{font-size:11px;line-height:1.3;text-align:center}}
-      #mermaid-target{{display:none}}
-      #mermaid-target svg{{display:block;width:100%!important;max-width:100%!important;height:auto!important;min-width:0}}
-      #mermaid-target .nodeLabel{{font-size:14px!important}}
-      #mermaid-target .edgeLabel{{font-size:11px!important}}
-      @media(max-width:650px){{.edge-label{{flex-basis:92px}}.node{{font-size:12px}}}}
-    </style>
-    <div id="fallback" aria-label="Interaction relationship graph">{fallback}</div>
-    <div id="mermaid-target" class="mermaid"></div>
+      .node{{background:#141b25;border:1px solid #566172;border-radius:6px;padding:9px 7px;flex:1;min-width:0;text-align:center;overflow-wrap:anywhere}}
+      .edge{{flex:0 0 112px;display:flex;align-items:center;flex-direction:column;font-size:23px}}
+      .edge small{{font-size:11px;text-align:center;line-height:1.3}}
+      #word-graph{{display:none}} #word-graph svg{{width:100%!important;max-width:100%!important;height:auto!important}}
+      @media(max-width:450px){{.edge{{flex-basis:85px}}.node{{font-size:12px}}}}
+    </style><div id="fallback">{fallback}</div><div id="word-graph"></div>
     <script type="module">
-      const source = {js_code};
-      try {{
-        const m = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
-        const mermaid = m.default;
-        mermaid.initialize({{startOnLoad:false,theme:'dark',securityLevel:'strict',
-          flowchart:{{htmlLabels:false,nodeSpacing:32,rankSpacing:70,useMaxWidth:true}},
-          themeVariables:{{background:'#07090e',primaryColor:'#10141c',
-                           primaryTextColor:'#eeeeee',lineColor:'#ff951f'}}}});
-        const node = document.getElementById('mermaid-target');
-        node.textContent = source;
-        node.style.display = 'block';
-        await mermaid.run({{nodes:[node]}});
-        if (!node.querySelector('svg')) throw new Error('Mermaid did not create SVG');
-        document.getElementById('fallback').style.display = 'none';
-      }} catch (error) {{
-        document.getElementById('mermaid-target').style.display = 'none';
-        document.getElementById('fallback').style.display = 'grid';
-        console.warn('Mermaid unavailable; showing validated relationship fallback.', error);
-      }}
+    const source = {js_code};
+    try {{
+      const m = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+      const mermaid = m.default;
+      mermaid.initialize({{startOnLoad:false,theme:'dark',securityLevel:'strict',
+        flowchart:{{htmlLabels:false,nodeSpacing:30,rankSpacing:65,useMaxWidth:true}},
+        themeVariables:{{background:'#07090e',primaryColor:'#10141c',primaryTextColor:'#eee'}}}});
+      const node = document.getElementById('word-graph');
+      node.style.display = 'block'; node.textContent = source;
+      await mermaid.run({{nodes:[node]}});
+      if (!node.querySelector('svg')) throw new Error('No SVG');
+      document.getElementById('fallback').style.display = 'none';
+    }} catch (error) {{
+      document.getElementById('word-graph').style.display = 'none';
+      document.getElementById('fallback').style.display = 'grid';
+    }}
     </script>'''
-    components.html(embed, height=450, scrolling=True)
+    components.html(doc, height=height, scrolling=True)
+    states = dict.fromkeys(row['state'] for row in rows)
+    legend = [f"{graph_state_info(state)['label']}: {graph_state_info(state)['meaning']}" for state in states]
+    if legend:
+        st.caption(' · '.join(legend))
 
-if 'selected_scenario' not in st.session_state or st.session_state.selected_scenario not in scenarios:
-    st.session_state.selected_scenario = data['display_contract']['default_selected_scenario_key']
-if 'view_level' not in st.session_state:
+
+def render_graph_evidence(rows, scenario):
+    view = scenario['business_view']
+    plain = read_path(view, 'graph_details.plain_summary')
+    if plain:
+        st.caption(plain)
+    body = ''.join(
+        '<tr><td>' + ESC(entity_label(r['source'])) + ' → ' + ESC(entity_label(r['target']))
+        + '</td><td>' + ESC(r['meaning']) + '</td><td><span class="graph-status ' + ESC(r['style'])
+        + '">' + ESC(r['label']) + '</span><br><small>' + ESC(r['technical_label'])
+        + '</small></td></tr>' for r in rows)
+    st.markdown('<table class="graph-evidence"><thead><tr><th>Interaction</th>'
+                '<th>Meaning</th><th>Status</th></tr></thead><tbody>' + body
+                + '</tbody></table>', unsafe_allow_html=True)
+
+
+def render_recommendation(scenario):
+    view = scenario['business_view']
+    text = view['recommended_next_step']
+    # Product demonstration explicitly displays decision support; never reveal
+    # scenario.decision or evaluator-only ground truth.
+    st.markdown('<section class="next-step" aria-label="Recommended next step">'
+                '<h3>Recommended Next Step</h3><p>' + ESC(text) + '</p></section>',
+                unsafe_allow_html=True)
+
+
+def render_reviewer_context(view):
+    st.subheader('Reviewer Context')
+    for field in config['reviewer_fields']:
+        st.markdown(f"**{field['label']}**")
+        st.write(read_path(view, field['field'], MISSING))
+
+
+def render_investigation_findings(view, detail):
+    quality = view.get('evidence_quality', {})
+    if quality.get('summary'):
+        st.write(quality['summary'])
+    for item in quality.get('items', []):
+        st.markdown(f"**{item.get('label', MISSING)} — {item.get('status', MISSING)}**")
+        st.write(item.get('explanation', MISSING))
+    st.subheader('Technical details')
+    # Read actual backend processing, not the duplicated summary in business_view.
+    processing = detail.get('backend_processing', {})
+    stages = [('Selected event', processing)] if 'tier1_evidence' in processing else [
+        (key.replace('_', ' ').title(), value)
+        for key, value in processing.items()
+        if isinstance(value, dict) and 'tier1_evidence' in value
+    ]
+    if not stages:
+        st.caption('No structured backend-processing details supplied. See Event Evidence.')
+    for label, stage in stages:
+        st.markdown(f'**{label}**')
+        tier1 = stage.get('tier1_evidence', {})
+        trigger = stage.get('tier2_trigger', {})
+        status = stage.get('tier2_result_status') or stage.get('tier2_execution_status')
+        handoff = stage.get('tier2_handoff', {})
+        composite = handoff.get('tier2_result') or stage.get('composite_result')
+        intent = handoff.get('intent_drift_result') or stage.get('intent_drift_result')
+        st.write('Initial detection:', 'Flagged' if tier1.get('tier1_flagged') is True else
+                 'Not flagged' if tier1.get('tier1_flagged') is False else MISSING)
+        for reason in tier1.get('tier1_reasons', []):
+            st.write('• ' + str(reason))
+        if tier1.get('policy_id'):
+            st.write('Policy reference:', tier1['policy_id'])
+        for reason in trigger.get('trigger_reasons', []):
+            st.write('Deeper-review trigger:', reason)
+        st.write('Deeper analysis:', config.get('display_statuses', {}).get(status, status or MISSING))
+        if isinstance(composite, dict):
+            st.write('Composite risk:', composite.get('risk_level', MISSING))
+            if composite.get('confidence') is not None:
+                st.write('Reported confidence:', composite['confidence'])
+        if isinstance(intent, dict):
+            st.write('Intent classification:', intent.get('classification', MISSING))
+        if not composite and status in ('NOT_EXECUTED_BY_DESIGN', 'AWAITING_EXPLICIT_EXECUTION'):
+            st.caption('No completed composite risk assessment was supplied.')
+
+
+def render_token_accounting(detail):
+    """Display only selected-event accounting, without borrowing another event's data."""
+    accounting = detail.get('token_accounting')
+    if not isinstance(accounting, dict) or not accounting:
+        st.info('Not measured for this selected event. No verified token-accounting record was provided.')
+        return
+    reservation = accounting.get('reservation', {})
+    reconciliation = accounting.get('reconciliation', {})
+    cells = st.columns(3)
+    cells[0].metric('Reserved tokens', reservation.get('reserved_tokens', MISSING))
+    cells[1].metric('Actual tokens', reconciliation.get('actual_tokens', reservation.get('consumed_tokens', MISSING)))
+    cells[2].metric('Settlement status', str(reconciliation.get('status', reservation.get('status', MISSING))))
+    st.caption('Selected-event recorded accounting, not a live rolling consumption rate.')
+    st.json(accounting, expanded=False)
+
+
+def set_level(level):
+    st.session_state.view_level = level
+
+
+# Scenario selection is based on the JSON keys and explicit event references.
+scenario_keys = list(scenarios)
+default_key = data['display_contract'].get('default_selected_scenario_key')
+if default_key not in scenarios:
+    default_key = scenario_keys[0]
+if st.session_state.get('scenario_key') not in scenarios:
+    st.session_state.scenario_key = default_key
+if st.session_state.get('view_level') not in (1, 2):
     st.session_state.view_level = 1
 
 with st.sidebar:
-    st.title('GUARDIUMONE')
-    st.caption('AgentMonitor · executive prototype')
-    st.markdown('---')
-    chosen = st.selectbox('Scenario', scenario_keys,
-                          index=scenario_keys.index(st.session_state.selected_scenario),
-                          format_func=lambda k: k.split(' · ', 1)[0] + ' · ' + SCENARIO_GUIDE[scenarios[k]['graph_rendering']['anomaly_type']]['short_name'])
-    if chosen != st.session_state.selected_scenario:
-        st.session_state.selected_scenario = chosen
-        st.session_state.view_level = 1
-        st.rerun()
+    st.title(config['brand'])
+    st.caption('AgentMonitor · Executive Risk Console')
+    st.selectbox('Scenario', scenario_keys, key='scenario_key',
+                 format_func=lambda k: k.split(' · ', 1)[0] + ' · ' + scenarios[k]['business_view']['scenario_label']
+                 if ' · ' in k else scenarios[k]['business_view']['scenario_label'],
+                 on_change=set_level, args=(1,))
+    st.divider()
+    st.subheader('Steps to Use Dashboard')
+    instructions = config['instructions']
+    for index, instruction in enumerate(instructions, 1):
+        if index == len(instructions):
+            st.markdown(f'**{index}. {instruction}**')
+        else:
+            st.markdown(f'{index}. {instruction}')
+    st.info('Validated sandbox evidence · Not a production incident.')
     if st.session_state.view_level == 2:
-        if st.button('← Back to overview', width='stretch'):
-            st.session_state.view_level = 1
-            st.rerun()
-    st.info('Validated live sandbox evidence · Not a production incident.')
-    st.caption('Selected scenario: ' + SCENARIO_GUIDE[scenarios[st.session_state.selected_scenario]['graph_rendering']['anomaly_type']]['short_name'])
-    st.caption('Choose a scenario, review Level 1, then investigate its evidence in Level 2.')
-    st.caption('Measurement counts describe the selected validated evidence package, not the full telemetry stream.')
-    with st.expander('Data source details'):
-        st.write('Processed, validated ML/KRI handoff; the dashboard does not read raw DE2 data.')
-        st.code('dashboard_handoff_1118.json')
-        st.caption('Handoff revision: ' + data['handoff_revision'])
-        st.caption('Approved workflow configuration: ' + data['current_environment']['current_topology_version'])
+        st.button('← Back to overview', use_container_width=True, on_click=set_level, args=(1,))
+    st.caption('Product demonstration · Review recommendations and supporting evidence.')
 
-key = st.session_state.selected_scenario
+key = st.session_state.scenario_key
 scenario = scenarios[key]
-signal_type = scenario['graph_rendering']['anomaly_type']
-guide = scenario_explanation(signal_type, scenario)
-detail = get_detail(key)
-incident = scenario['incident']
+view = scenario['business_view']
+detail, primary = scenario_detail(scenario)
+st.caption('ENTERPRISE AI GOVERNANCE / VALIDATED SANDBOX')
 
-st.caption('ENTERPRISE AI GOVERNANCE / EXECUTIVE VIEW / VALIDATED SANDBOX')
 if st.session_state.view_level == 1:
-    st.caption('LEVEL 1 / EXECUTIVE OVERVIEW')
+    st.caption('PAGE 1 / EXECUTIVE OVERVIEW')
     st.title('AI Risk Overview')
-    st.markdown(f"### {guide['headline']}")
-    st.markdown('<div class="summary-lead">' + html_lib.escape(guide['what']) + '</div>',
-                unsafe_allow_html=True)
-    status_label = {
-        'REJECTED_INTERACTION': 'Policy rejected · BL-1 · Review required',
-        'GRAPH_BOUNDARY_ANOMALY': 'Unapproved model + two expected connections not observed · Review required',
-        'VELOCITY_ANOMALY': 'Unusual interaction activity · Review required',
-    }[signal_type]
-    st.markdown('<div class="status-line"><strong>' + html_lib.escape(status_label) +
-                '</strong> · Validated live sandbox evidence (not production)</div>',
-                unsafe_allow_html=True)
-    render_explainability(guide)
-    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
-
-    st.subheader('Three Executive Risk Indicators (KRIs)')
-    render_kri_cards(scenario, signal_type)
-
-    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
-    left, right = st.columns([1.4, 1], gap='large')
-    with left:
-        st.subheader('Expected vs. Actual AI Behavior')
-        st.caption('Approved workflow and validated flagged connections. This network is not a complete record of the selected event.')
-        # Level 1: full graph always visible. Avoid rendering Mermaid inside a collapsed expander.
-        render_mermaid(key, focus_event=False)
-        st.caption(graph_state_legend(key))
-        st.button('Investigate this event →', type='primary', width='stretch',
-                  on_click=lambda: st.session_state.update(view_level=2))
-    with right:
-        # Facts are read from the selected validated scenario, not hand-authored
-        # interpretations that need maintenance whenever the ML handoff changes.
-        st.subheader('Selected Event Details')
-        evidence = scenario['evidence']
-        st.write('AI agent:', graph_node_label(evidence.get('agent', scenario['agent'])))
-        st.write('Connected tool or model:', graph_node_label(evidence['target']))
-        st.write('Event:', guide['short_name'])
-        if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-            drift = evidence.get('boundary_drift', {})
-            st.write('Unexpected connections:', drift.get('new_edge_signals', 'Not supplied'))
-            st.write('Expected connections not observed:', drift.get('missing_edge_signals', 'Not supplied'))
-        elif signal_type == 'VELOCITY_ANOMALY':
-            activity = evidence.get('interaction_velocity', {})
-            st.write('Recorded interactions:', activity.get('current_rate', 'Not supplied'))
-            st.write('Typical level:', round(activity['baseline_rate'], 2) if activity.get('baseline_rate') is not None else 'Not supplied')
-            st.write('Alert threshold:', activity.get('threshold', 'Not supplied'))
-            st.write('Monitoring window (minutes):', activity.get('window_minutes', 'Not supplied'))
-        elif signal_type == 'REJECTED_INTERACTION':
-            st.write('Policy finding:', evidence.get('policy_status', 'Not supplied').title())
-        with st.expander('Evidence identifiers'):
-            st.write('Event ID:', incident)
-            st.write('Evidence type:', evidence.get('event_type', 'Not supplied'))
-            if evidence.get('trace_id'):
-                st.write('Trace ID:', evidence['trace_id'])
-                
-
-    with st.expander('Backend evidence · Optional technical detail'):
-        st.caption('The full backend details refer only to the selected validated event.')
-        st.json(detail.get('backend_processing', {}), expanded=False)
-        st.json(evidence_summary(scenario, detail), expanded=False)
-        st.download_button('Export scenario evidence', json.dumps(scenario['evidence'], indent=2),
-                           file_name=f'{scenario["evidence"]["event_type"].lower()}_evidence.json',
-                           mime='application/json')
+    st.subheader(view['business_title'])
+    render_overview(scenario)
+    render_context_metrics(scenario)
+    st.subheader('Expected vs. Actual AI Behavior')
+    st.caption('Full approved workflow with validated flagged connections. This is not a complete record of the selected event.')
+    render_graph(graph_relationships(scenario, focus=False))
+    st.button('Investigate Event →', type='primary', use_container_width=True, on_click=set_level, args=(2,))
+    st.divider()
+    render_kri_cards(scenario)
+    render_recommendation(scenario)
 else:
-    st.title('Connection Investigation')
-    st.caption('LEVEL 2 / EVENT INVESTIGATION · Validated sandbox evidence')
-    st.subheader(guide['headline'])
-    event = detail['primary_event'] if signal_type == 'GRAPH_BOUNDARY_ANOMALY' else detail['selected_event']
-    st.markdown('<span class="pill">EVENT-LEVEL EVIDENCE</span>', unsafe_allow_html=True)
-    # Level 1 presents the incident headline and validated evidence.
-    # Keep Level 2 focused on detailed connections, observations, and ML findings.
-    st.caption('Investigate the selected connection, review validated observations, and inspect the backend findings.')
-    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
-    st.subheader('Three Executive Risk Indicators · Selected Event')
-    render_kri_cards(scenario, signal_type)
-
-    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
-    a, b = st.columns([1.45, 1])
-    with a:
-        # Level 2: show only the selected agent's relevant connection(s).
-        # This is intentionally different from Level 1's full approved topology.
-        st.subheader('Selected Event Connection')
-        render_mermaid(key, focus_event=True)
-        st.caption(graph_state_legend(key))
-        with st.expander('Full connection names and evidence labels'):
-            for relationship in graph_edges_for_view(key, focus_event=True):
-                full_state, _ = edge_display(relationship, key)
-                st.write(nice_entity(relationship['source']) + ' → '
-                         + nice_entity(relationship['target']) + ' — ' + full_state)
-        st.subheader('Event Evidence Trail')
-        st.caption('Validated observations and backend processing. The steps below describe evidence stages, not an inferred sequence of agent actions.')
-        if signal_type == 'REJECTED_INTERACTION':
-            context = detail['backend_processing']['runtime_context']
-            observed = context['observed_action']
-            st.markdown('**1. Tool action recorded**')
-            st.write('Customer-service agent → ' + graph_node_label(event['target_entity_id']))
-            st.write('Action: ' + observed['operation'].replace('_', ' ') + ' · ' + str(observed.get('tool', 'Not supplied')).replace('_', ' '))
-            st.markdown('**2. Policy rejection issued**')
-            st.write('DE2 emitted REJECTED_INTERACTION under rule ' + str(detail['backend_processing']['tier1_evidence']['policy_id']) + '.')
-            st.markdown('**3. Backend processing recorded**')
-            st.write('Tier 1 flagged the policy violation; Tier 2 analysis completed.')
-            st.caption('The observed action is not confirmation that a payout was completed.')
-        elif signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-            st.markdown('**1. Unexpected AI model connection observed**')
-            st.write(graph_node_label(event['source_entity_id']) + ' → ' + graph_node_label(event['target_entity_id']))
-            st.caption('Unexpected connection · observed outside the approved workflow (NEW_EDGE)')
-            missing = detail['associated_missing_edge_events']
-            for idx, item in enumerate(missing, start=2):
-                st.markdown(f'**{idx}. Expected tool relationship not observed**')
-                st.write(graph_node_label(item['source_entity_id']) + ' → ' + graph_node_label(item['target_entity_id']))
-                st.caption('Expected connection not observed in this trace (MISSING_EDGE)')
-            st.markdown('**4. Backend processing recorded**')
-            st.write('Tier 1 flagged all three signals; all triggered Tier 2 preparation.')
-            st.caption('All three findings belong to the same validated trace. This display order is not an execution timeline.')
-        else:
-            v = scenario['evidence']['interaction_velocity']
-            st.markdown('**1. Approved tool relationship observed**')
-            st.write(graph_node_label(event['source_entity_id']) + ' → ' + graph_node_label(event['target_entity_id']))
-            st.markdown('**2. Interaction-rate anomaly emitted**')
-            st.write(f"Recorded: {v['current_rate']:g} interactions · Baseline: {v['baseline_rate']:.2f} · Threshold: {v['threshold']:g} · Window: {v['window_minutes']:g} minutes")
-            st.markdown('**3. Backend processing recorded**')
-            st.write('Tier 1 flagged the velocity anomaly and identified a topology-version mismatch.')
-            st.caption('The topology-version mismatch reflects the documented controlled test.')
-        st.caption('Source: validated ML handoff; no events, metrics, or outcomes were inferred.')
-    with b:
-        st.subheader('Investigation Findings')
-        st.caption('Backend determinations and unresolved questions—not a repeat of the event trace.')
-        processing = detail.get('backend_processing', {})
-        if signal_type == 'GRAPH_BOUNDARY_ANOMALY':
-            stages = [
-                ('Unexpected AI model connection', processing.get('NEW_EDGE', {})),
-                ('Claim retrieval connection not observed', processing.get('MISSING_FETCH', {})),
-                ('Coverage verification connection not observed', processing.get('MISSING_VERIFY', {})),
-            ]
-            for label, stage in stages:
-                t1 = stage.get('tier1_evidence', {})
-                st.markdown('**' + label + '**')
-                st.write('Graph anomaly: ' + ('Detected' if t1.get('graph_anomaly') is True else 'Not flagged' if t1.get('graph_anomaly') is False else 'Not supplied'))
-                if t1.get('policy_violation') is True:
-                    st.write('Policy finding: Flagged · ' + str(t1.get('policy_id') or 'Policy ID unavailable'))
-                st.caption('Tier 2: Triggered — ' + readable_status(stage.get('tier2_result_status')))
-            st.markdown('**Topology assessment:** ' + readable_status(processing.get('NEW_EDGE', {}).get('tier1_evidence', {}).get('topology_assessment_status')))
-            st.markdown('**Downstream impact:** ' + readable_status(detail.get('blast_radius', {}).get('downstream_impact_status')))
-        else:
-            t1 = processing.get('tier1_evidence', {})
-            st.markdown('**Tier 1 assessment**')
-            st.write('Flagged: ' + ('Yes' if t1.get('tier1_flagged') else 'No' if t1.get('tier1_flagged') is False else 'Not supplied'))
-            st.write('Graph anomaly: ' + ('Detected' if t1.get('graph_anomaly') is True else 'Not flagged' if t1.get('graph_anomaly') is False else 'Not supplied'))
-            st.write('Policy violation: ' + ('Flagged' if t1.get('policy_violation') is True else 'Not flagged' if t1.get('policy_violation') is False else 'Not supplied'))
-            st.write('Velocity anomaly: ' + ('Detected' if t1.get('velocity_anomaly') is True else 'Not flagged' if t1.get('velocity_anomaly') is False else 'Not supplied'))
-            st.write('Topology assessment: ' + readable_status(t1.get('topology_assessment_status')))
-            st.markdown('**Tier 2 assessment**')
-            st.write('Execution: ' + readable_status(processing.get('tier2_execution_status', processing.get('tier2_result_status'))))
-            if signal_type == 'REJECTED_INTERACTION':
-                tier2 = processing.get('tier2_handoff', {}).get('tier2_result', {})
-                intent = processing.get('tier2_handoff', {}).get('intent_drift_result', {})
-                st.write('Composite risk: ' + str(tier2.get('risk_level', 'Not supplied')))
-                st.write('Intent classification: ' + str(intent.get('classification', 'Not supplied')))
-                st.markdown('**Unconfirmed:** Downstream payout outcome')
-            else:
-                st.markdown('**Unresolved:** ' + readable_status(processing.get('tier2_result_status')))
-                st.caption('Version mismatch reflects the controlled velocity-test topology.')
-        st.caption('No automatic containment action is asserted by the ML handoff.')
-
-    st.markdown('<div class="block-gap"></div>', unsafe_allow_html=True)
-    st.subheader('Technical Evidence')
-    st.caption('Optional supporting material, kept out of the main investigation flow.')
-    with st.expander('Event details and identifiers'):
-        st.write('Event ID:', incident)
-        st.write('Trace ID:', event.get('trace_id', 'Not supplied'))
-        st.write('Span ID:', event.get('span_id') or 'Not supplied')
-        st.write('Evidence source:', scenario['evidence']['source'])
-        st.json(event, expanded=False)
-    with st.expander('Tier 1 / Tier 2 backend evidence'):
-        st.json(processing, expanded=False)
-    with st.expander('Selected event JSON'):
+    st.caption('PAGE 2 / EVENT INVESTIGATION')
+    st.title('Event Investigation')
+    st.subheader(view['business_title'])
+    render_reviewer_context(view)
+    st.divider()
+    left, right = st.columns([1.12, 1], gap='large')
+    rows = graph_relationships(scenario, focus=True)
+    with left:
+        st.subheader('Event-specific Graph')
+        render_graph(rows, height=330)
+    with right:
+        st.subheader('Graph Evidence')
+        render_graph_evidence(rows, scenario)
+    with st.expander('Investigative Findings / Technical Details'):
+        render_investigation_findings(view, detail)
+    with st.expander('Token Accounting'):
+        render_token_accounting(detail)
+    with st.expander('Event Evidence / JSON'):
+        st.caption('Original selected-event data from the validated ML handoff.')
         st.json(detail, expanded=False)
-    st.download_button('Export selected event evidence', json.dumps(detail, indent=2),
-                       file_name=f'{event["signal_type"].lower()}_event.json', mime='application/json')
+        st.download_button('Export selected event evidence',
+                           json.dumps(detail, ensure_ascii=False, indent=2),
+                           file_name=f'{scenario["incident"]}_evidence.json', mime='application/json')
+    st.button('← Back to Overview', use_container_width=True, on_click=set_level, args=(1,))
 
 with st.expander('Data provenance'):
-    st.caption('Validated ML/KRI handoff · selected evidence set only; not the full telemetry stream.')
-    st.write('Handoff:', data['handoff_revision'])
-    st.write('Current topology:', data['current_environment']['current_topology_version'])
-    st.write('Current model mode:', data['current_environment']['current_model_mode'])
-    st.caption('The controlled velocity test used a temporary topology; it is not the current v3 Qwen baseline.')
-# Do not display the full handoff in participant mode: it includes evaluator-only
-# recommended decisions. Keep the validated source JSON in the app directory.
-
+    st.write('ML handoff revision:', data['handoff_revision'])
+    st.write('Presentation version:', config['version'])
+    st.write('Evidence source:', read_path(scenario, 'evidence.source', data.get('source', MISSING)))
+    st.write('Current approved workflow:', read_path(data, 'current_environment.current_topology_version', MISSING))
+    st.caption('Historical sandbox validation, not production incidents or the full telemetry stream. Recommendations are product decision support.')
