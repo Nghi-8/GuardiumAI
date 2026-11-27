@@ -316,8 +316,8 @@ def mermaid_code(rows):
     return '\n'.join(lines)
 
 
-def render_graph(rows, height=450):
-    """Use Mermaid when available; preserve a readable relationship fallback offline."""
+def render_graph(rows, height=450, *, fit_to_panel=False):
+    """Render the full overview without an inner scrollbar; preserve the focused view."""
     colors = {'approved':'#82c8a4','flagged':'#ffad50','missing':'#c0c4cf','other':'#9ca8bc'}
     fallback = ''.join(
         f'<div class="edge-row"><div class="node">{ESC(entity_label(r["source"]))}</div>'
@@ -325,6 +325,40 @@ def render_graph(rows, height=450):
         f'<div class="node">{ESC(entity_label(r["target"]))}</div></div>'
         for r in rows) or '<p>No graph relationships supplied.</p>'
     js_code = json.dumps(mermaid_code(rows)).replace('</','<\\/')
+    fit_css = '''
+      html,body{width:100%;height:100%;margin:0;overflow:hidden}
+      #graph-viewport{position:relative;box-sizing:border-box;width:100%;height:100%;padding:5px;overflow:hidden}
+      #fallback{position:absolute;left:50%;top:50%;box-sizing:border-box;width:calc(100% - 10px);
+          transform:translate(-50%,-50%);transform-origin:center center;
+          grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;align-content:center}
+      #fallback .edge-row{gap:5px}
+      #fallback .node{padding:7px 5px;font-size:13px;line-height:1.25}
+      #fallback .edge{flex-basis:98px;font-size:19px}
+      #fallback .edge small{font-size:11px;line-height:1.2}
+      #word-graph{width:100%;height:100%;overflow:hidden}
+      #word-graph svg{display:block;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important}
+      @media(max-width:660px){#fallback{grid-template-columns:1fr;gap:4px}
+          #fallback .node{padding:4px 5px;font-size:12px}
+          #fallback .edge{flex-basis:100px;font-size:15px}
+          #fallback .edge small{font-size:10px}}
+    ''' if fit_to_panel else ''
+    fit_js = '''
+      const viewport = document.getElementById('graph-viewport');
+      const fallback = document.getElementById('fallback');
+      function fitFallback() {
+        if (getComputedStyle(fallback).display === 'none') return;
+        fallback.style.transform = 'translate(-50%,-50%)';
+        const available = Math.max(1,viewport.clientHeight - 12);
+        const natural = Math.max(1,fallback.offsetHeight);
+        const scale = Math.min(1,available / natural);
+        fallback.style.transform = 'translate(-50%,-50%) scale(' + scale + ')';
+      }
+      fitFallback();
+      if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(fitFallback).observe(viewport);
+      }
+      window.addEventListener('resize',fitFallback);
+    ''' if fit_to_panel else ''
     doc = f'''<style>
       body{{background:#07090e;color:#f1f1ef;font:14px system-ui,sans-serif;margin:5px}}
       #fallback{{display:grid;gap:8px;padding:3px}}
@@ -334,8 +368,10 @@ def render_graph(rows, height=450):
       .edge small{{font-size:11px;text-align:center;line-height:1.3}}
       #word-graph{{display:none}} #word-graph svg{{width:100%!important;max-width:100%!important;height:auto!important}}
       @media(max-width:450px){{.edge{{flex-basis:85px}}.node{{font-size:12px}}}}
-    </style><div id="fallback">{fallback}</div><div id="word-graph"></div>
+      {fit_css}
+    </style><div id="graph-viewport"><div id="fallback">{fallback}</div><div id="word-graph"></div></div>
     <script type="module">
+    {fit_js}
     const source = {js_code};
     try {{
       const m = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
@@ -346,14 +382,27 @@ def render_graph(rows, height=450):
       const node = document.getElementById('word-graph');
       node.style.display = 'block'; node.textContent = source;
       await mermaid.run({{nodes:[node]}});
-      if (!node.querySelector('svg')) throw new Error('No SVG');
+      const svg = node.querySelector('svg');
+      if (!svg) throw new Error('No SVG');
+      if ({str(fit_to_panel).lower()}) {{
+        // Preserve the graph's aspect ratio and fit both dimensions so no
+        // relationship is clipped by the iframe's viewport.
+        svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+        if (!svg.getAttribute('viewBox')) {{
+          const bounds = svg.getBBox();
+          if (bounds.width > 0 && bounds.height > 0) {{
+            svg.setAttribute('viewBox', [bounds.x,bounds.y,bounds.width,bounds.height].join(' '));
+          }}
+        }}
+      }}
       document.getElementById('fallback').style.display = 'none';
     }} catch (error) {{
       document.getElementById('word-graph').style.display = 'none';
       document.getElementById('fallback').style.display = 'grid';
+      if (typeof fitFallback === 'function') fitFallback();
     }}
     </script>'''
-    components.html(doc, height=height, scrolling=True)
+    components.html(doc, height=height, scrolling=not fit_to_panel)
     states = dict.fromkeys(row['state'] for row in rows)
     legend = [f"{graph_state_info(state)['label']}: {graph_state_info(state)['meaning']}" for state in states]
     if legend:
@@ -500,7 +549,7 @@ if st.session_state.view_level == 1:
     render_context_metrics(scenario)
     st.subheader('Expected vs. Actual AI Behavior')
     st.caption('Full approved workflow with validated flagged connections. This is not a complete record of the selected event.')
-    render_graph(graph_relationships(scenario, focus=False))
+    render_graph(graph_relationships(scenario, focus=False), height=560, fit_to_panel=True)
     st.button('Investigate Event →', type='primary', use_container_width=True, on_click=set_level, args=(2,))
     st.divider()
     render_kri_cards(scenario)
