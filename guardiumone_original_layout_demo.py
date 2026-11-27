@@ -80,15 +80,21 @@ h1,h2,h3{letter-spacing:-.025em}
 .graph-evidence th,.graph-evidence td{text-align:left;vertical-align:top;padding:9px 7px;border-bottom:1px solid #363c47;overflow-wrap:anywhere}
 .graph-evidence th{color:#d9c09c;font-weight:600}
 .graph-status{font-weight:600}
+.graph-status.baseline{color:#87b9e7}
+.graph-status.baseline-only{color:#62d2db}
+.graph-status.rate-anomaly{color:#e6c76a}
 .graph-status.approved{color:#82c8a4}.graph-status.flagged{color:#ffad50}
- .graph-status.missing{color:#c0c4cf}.graph-status.other{color:#a0aaba}.graph-status.violation{color:#ff9b9b}
+ .graph-status.missing{color:#be9cf0}.graph-status.other{color:#a0aaba}.graph-status.violation{color:#ff9b9b}
 .graph-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:5px 0 8px}
 .graph-chip{display:inline-flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid #3a4655;border-radius:5px;background:#151d28;color:#d7dfeb;font-size:.79rem;line-height:1.4}
 .graph-chip::before{content:"";width:20px;height:0;border-top:3px solid #a0aaba}
+.graph-chip.baseline::before{border-color:#87b9e7}
+.graph-chip.baseline-only::before{border-color:#62d2db;border-top-style:dotted}
+.graph-chip.rate-anomaly::before{border-color:#e6c76a}
 .graph-chip.approved::before{border-color:#65a78b}
 .graph-chip.flagged::before{border-color:#ff951f}
 .graph-chip.violation::before{border-color:#f07882}
-.graph-chip.missing::before{border-color:#a0a7b2;border-top-style:dashed}
+.graph-chip.missing::before{border-color:#be9cf0;border-top-style:dashed}
 .graph-chip.other::before{border-color:#637082}
 .stButton>button{border:1px solid #b97735;background:#171c25;color:#ffb05e}
 @media(max-width:720px){.overview-panel{padding:13px}.ov-grid,.ov-status-row{grid-template-columns:minmax(0,1fr)}.graph-evidence{font-size:.82rem}}
@@ -390,15 +396,18 @@ def mermaid_code(rows):
     lines = ['flowchart LR']
     for node, ident in ids.items():
         lines.append(f'{ident}["{clean(entity_label(node))}"]')
-    styles = {'approved':[], 'flagged':[], 'violation':[], 'missing':[], 'other':[]}
+    styles = {'baseline':[], 'baseline-only':[], 'approved':[], 'flagged':[], 'violation':[], 'missing':[], 'rate-anomaly':[], 'other':[]}
     for index, row in enumerate(rows):
         label = clean(row['label'])
         lines.append(f'{ids[row["source"]]} -->|"{label}"| {ids[row["target"]]}')
         styles.get(row['style'], styles['other']).append(index)
-    colors = {'approved':'stroke:#65a78b,stroke-width:2px;',
+    colors = {'baseline':'stroke:#87b9e7,stroke-width:2px;',
+              'baseline-only':'stroke:#62d2db,stroke-width:3px,stroke-dasharray:1 5,stroke-linecap:round;',
+              'rate-anomaly':'stroke:#e6c76a,stroke-width:4px;',
+              'approved':'stroke:#65a78b,stroke-width:2px;',
               'flagged':'stroke:#ff951f,stroke-width:4px;',
               'violation':'stroke:#f07882,stroke-width:4px;',
-              'missing':'stroke:#a0a7b2,stroke-width:3px,stroke-dasharray:5 5;',
+              'missing':'stroke:#be9cf0,stroke-width:3px,stroke-dasharray:7 4;',
               'other':'stroke:#637082,stroke-width:1.5px;'}
     for style, indices in styles.items():
         if indices:
@@ -409,10 +418,12 @@ def mermaid_code(rows):
 
 def render_graph(rows, height=450, *, fit_to_panel=False):
     """Render the full overview without an inner scrollbar; preserve the focused view."""
-    colors = {'approved':'#82c8a4','flagged':'#ffad50','violation':'#ff9b9b','missing':'#c0c4cf','other':'#9ca8bc'}
+    colors = {'baseline':'#87b9e7','baseline-only':'#62d2db','approved':'#82c8a4',
+              'flagged':'#ffad50','violation':'#ff9b9b','missing':'#be9cf0',
+              'rate-anomaly':'#e6c76a','other':'#9ca8bc'}
     fallback = ''.join(
         f'<div class="edge-row"><div class="node">{ESC(entity_label(r["source"]))}</div>'
-        f'<div class="edge" style="color:{colors.get(r["style"],colors["other"])}">→<small>{ESC(r["label"])}</small></div>'
+        f'<div class="edge {ESC(r["style"])}" style="color:{colors.get(r["style"],colors["other"])}"><span class="edge-arrow" aria-hidden="true"></span><small>{ESC(r["label"])}</small></div>'
         f'<div class="node">{ESC(entity_label(r["target"]))}</div></div>'
         for r in rows) or '<p>No graph relationships supplied.</p>'
     js_code = json.dumps(mermaid_code(rows)).replace('</','<\\/')
@@ -456,6 +467,10 @@ def render_graph(rows, height=450, *, fit_to_panel=False):
       .edge-row{{display:flex;align-items:center;gap:8px;min-width:0}}
       .node{{background:#141b25;border:1px solid #566172;border-radius:6px;padding:9px 7px;flex:1;min-width:0;text-align:center;overflow-wrap:anywhere}}
       .edge{{flex:0 0 112px;display:flex;align-items:center;flex-direction:column;font-size:23px}}
+      .edge-arrow{{display:block;position:relative;width:34px;border-top:2px solid currentColor;margin:6px 0 7px}}
+      .edge-arrow::after{{content:"";position:absolute;right:-1px;top:-4px;width:6px;height:6px;border-top:2px solid currentColor;border-right:2px solid currentColor;transform:rotate(45deg)}}
+      .edge.baseline-only .edge-arrow{{border-top:3px dotted currentColor}}
+      .edge.missing .edge-arrow{{border-top:3px dashed currentColor}}
       .edge small{{font-size:11px;text-align:center;line-height:1.3}}
       #word-graph{{display:none}} #word-graph svg{{width:100%!important;max-width:100%!important;height:auto!important}}
       @media(max-width:450px){{.edge{{flex-basis:85px}}.node{{font-size:12px}}}}
@@ -494,8 +509,11 @@ def render_graph(rows, height=450, *, fit_to_panel=False):
     }}
     </script>'''
     components.html(doc, height=height, scrolling=not fit_to_panel)
-    states = list(dict.fromkeys(row['state'] for row in rows))
-    legend_items = [graph_state_info(state) for state in states]
+    # Use the JSON's canonical state order, never the graph's edge traversal order.
+    # Keep only states present in this graph to keep the legend compact.
+    state_config = config['graph_states']
+    states = {row['state'] if row['state'] in state_config else 'UNCLASSIFIED' for row in rows}
+    legend_items = [info for state, info in state_config.items() if state in states]
     if legend_items:
         chips = ''.join(
             '<span class="graph-chip ' + ESC(item['style']) + '" title="' + ESC(item['meaning'])
